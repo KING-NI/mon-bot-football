@@ -12,13 +12,40 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 # ------------------------------------------------------------
 # 1. CONFIGURATION
 # ------------------------------------------------------------
-BZZOIRO_API_KEY = os.getenv("BZZOIRO_API_KEY", "633d50eb603d3d9845fb270244372396cb95")
+BZZOIRO_API_KEY = os.getenv("BZZOIRO_API_KEY", "633d50eb603d3d9845fb270244372396cb95263d")
 BZZOIRO_URL = "https://sports.bzzoiro.com/api/v2/"
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8602372536:AAEtG5qLBhOg97PfoneuWV9XWR0FSmQIYwU")
 CHAT_ID = os.getenv("CHAT_ID", "6842436232")
 
 # ------------------------------------------------------------
-# 2. MULTILINGUE (D)
+# 2. TEST DE CONNECTIVITÉ API
+# ------------------------------------------------------------
+def test_api_connectivity():
+    """Teste la connexion à l'API Bzzoiro."""
+    url = f"{BZZOIRO_URL}leagues/"
+    headers = {"Authorization": f"Token {BZZOIRO_API_KEY}"}
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        print(f"🔍 Test API Bzzoiro: status {response.status_code}")
+        if response.status_code == 200:
+            print("✅ API Bzzoiro accessible !")
+            return True
+        else:
+            print(f"❌ API Bzzoiro: erreur {response.status_code}")
+            print(f"   Réponse: {response.text[:200]}")
+            return False
+    except requests.exceptions.Timeout:
+        print("❌ API Bzzoiro: TIMEOUT (le serveur ne répond pas)")
+        return False
+    except requests.exceptions.ConnectionError:
+        print("❌ API Bzzoiro: ERREUR DE CONNEXION")
+        return False
+    except Exception as e:
+        print(f"❌ API Bzzoiro: {e}")
+        return False
+
+# ------------------------------------------------------------
+# 3. MULTILINGUE (D)
 # ------------------------------------------------------------
 LANGUAGES = {
     "fr": {
@@ -96,7 +123,7 @@ def get_text(lang, key):
     return LANGUAGES.get(lang, LANGUAGES["fr"]).get(key, key)
 
 # ------------------------------------------------------------
-# 3. BASE DE DONNÉES SQLITE
+# 4. BASE DE DONNÉES SQLITE
 # ------------------------------------------------------------
 def init_db():
     conn = sqlite3.connect('predictions.db')
@@ -156,7 +183,7 @@ def init_db():
     conn.close()
 
 # ------------------------------------------------------------
-# 4. FONCTIONS BZZOIRO
+# 5. FONCTIONS BZZOIRO (avec retries)
 # ------------------------------------------------------------
 _league_cache = None
 _league_cache_time = None
@@ -172,21 +199,30 @@ def get_all_leagues():
     _league_cache_time = datetime.now()
     return _league_cache
 
-def bzzoiro_request(endpoint, params=None, method='GET'):
+def bzzoiro_request(endpoint, params=None, method='GET', retries=3):
     headers = {"Authorization": f"Token {BZZOIRO_API_KEY}"}
     url = f"{BZZOIRO_URL}{endpoint}"
-    try:
-        if method == 'GET':
-            response = requests.get(url, params=params, headers=headers, timeout=10)
-        else:
-            response = requests.post(url, json=params, headers=headers, timeout=10)
-        if response.status_code != 200:
-            print(f"❌ Erreur Bzzoiro {endpoint}: {response.status_code}")
-            return None
-        return response.json()
-    except Exception as e:
-        print(f"❌ Exception Bzzoiro: {e}")
-        return None
+    for attempt in range(retries):
+        try:
+            if method == 'GET':
+                response = requests.get(url, params=params, headers=headers, timeout=15)
+            else:
+                response = requests.post(url, json=params, headers=headers, timeout=15)
+            if response.status_code == 200:
+                return response.json()
+            print(f"⚠️ Tentative {attempt+1}: erreur {response.status_code}")
+            if attempt < retries - 1:
+                time.sleep(2)
+        except requests.exceptions.Timeout:
+            print(f"⚠️ Tentative {attempt+1}: TIMEOUT")
+        except requests.exceptions.ConnectionError:
+            print(f"⚠️ Tentative {attempt+1}: ERREUR DE CONNEXION")
+        except Exception as e:
+            print(f"⚠️ Tentative {attempt+1}: {e}")
+        if attempt < retries - 1:
+            time.sleep(2)
+    print(f"❌ Échec après {retries} tentatives pour {endpoint}")
+    return None
 
 def fetch_bzzoiro_events(date_from=None, date_to=None, market="1x2"):
     if date_from is None:
@@ -210,7 +246,7 @@ def format_match(event):
     }
 
 # ------------------------------------------------------------
-# 5. FONCTIONS MÉTIERS
+# 6. FONCTIONS MÉTIERS
 # ------------------------------------------------------------
 def get_league_table(league_name):
     data = bzzoiro_request('standings/', params={"league": league_name})
@@ -360,7 +396,7 @@ def format_live_events(events):
     return texte
 
 # ------------------------------------------------------------
-# 6. BACKTESTING & TENDANCES
+# 7. BACKTESTING & TENDANCES
 # ------------------------------------------------------------
 def calculate_backtest(user_id=None, days=30):
     conn = sqlite3.connect('predictions.db')
@@ -404,7 +440,7 @@ def analyze_team_trends(team_name):
     return texte
 
 # ------------------------------------------------------------
-# 7. RÉCUPÉRATION DES MATCHS
+# 8. RÉCUPÉRATION DES MATCHS
 # ------------------------------------------------------------
 def get_all_matches():
     events = fetch_bzzoiro_events(market="1x2")
@@ -434,7 +470,7 @@ def get_matches_for_league(league_filter):
     return filtered, None
 
 # ------------------------------------------------------------
-# 8. MARCHÉS ET PRONOSTICS (C - Interface améliorée)
+# 9. MARCHÉS ET PRONOSTICS (C - Interface améliorée)
 # ------------------------------------------------------------
 def generate_progress_bar(value, total=100, length=10):
     filled = int((value / total) * length)
@@ -573,7 +609,7 @@ def get_stats(user_id=None):
     return "📊 Aucune donnée statistique disponible."
 
 # ------------------------------------------------------------
-# 9. RECHERCHE D'ÉQUIPE
+# 10. RECHERCHE D'ÉQUIPE
 # ------------------------------------------------------------
 def search_team(team_name):
     resultats = []
@@ -598,7 +634,7 @@ def search_team(team_name):
     return "\n\n".join(resultats)
 
 # ------------------------------------------------------------
-# 10. STATISTIQUES ET COMPOSITIONS
+# 11. STATISTIQUES ET COMPOSITIONS
 # ------------------------------------------------------------
 def get_match_statistics(match_id):
     return bzzoiro_request(f'events/{match_id}/statistics/')
@@ -638,7 +674,7 @@ def format_lineups(lineups):
     return texte
 
 # ------------------------------------------------------------
-# 11. NOTIFICATIONS AUTOMATIQUES
+# 12. NOTIFICATIONS AUTOMATIQUES
 # ------------------------------------------------------------
 def send_notifications():
     conn = sqlite3.connect('predictions.db')
@@ -668,7 +704,7 @@ def run_scheduler_notifications():
         time.sleep(60)
 
 # ------------------------------------------------------------
-# 12. MENUS (B - Tous les championnats, D - Multilingue)
+# 13. MENUS (B - Tous les championnats, D - Multilingue)
 # ------------------------------------------------------------
 def menu_options(lang="fr"):
     texts = LANGUAGES.get(lang, LANGUAGES["fr"])
@@ -688,45 +724,70 @@ def menu_options(lang="fr"):
     return markup
 
 def menu_ligues_inline(lang="fr"):
+    """Affiche les ligues disponibles, avec fallback si l'API est vide."""
     texts = LANGUAGES.get(lang, LANGUAGES["fr"])
     markup = InlineKeyboardMarkup(row_width=2)
+    
     leagues = get_all_leagues()
-    if not leagues:
-        fallback = {"Premier League": "premier league", "Ligue 1": "ligue 1", "Bundesliga": "bundesliga",
-                    "La Liga": "la liga", "Serie A": "serie a", "MLS": "mls"}
-        for nom, cle in fallback.items():
-            markup.add(InlineKeyboardButton(nom, callback_data=f"league_{cle}"))
-    else:
+    added = False
+    
+    if leagues:
         for league in leagues[:20]:
             name = league.get('name', 'Inconnu')
             slug = league.get('slug', name.lower().replace(' ', '-'))
             markup.add(InlineKeyboardButton(name, callback_data=f"league_{slug}"))
+            added = True
+    
+    # Fallback : ligues connues si aucune n'est trouvée
+    if not added:
+        fallback = {
+            "Premier League": "premier-league",
+            "Ligue 1": "ligue-1",
+            "Bundesliga": "bundesliga",
+            "La Liga": "la-liga",
+            "Serie A": "serie-a",
+            "MLS": "mls"
+        }
+        for nom, cle in fallback.items():
+            markup.add(InlineKeyboardButton(nom, callback_data=f"league_{cle}"))
+            added = True
+    
+    # Toujours ajouter le bouton Retour
     markup.add(InlineKeyboardButton(texts["back"], callback_data="menu_back"))
     return markup
 
 def menu_matchs_inline(league_key, matches, lang="fr"):
     texts = LANGUAGES.get(lang, LANGUAGES["fr"])
     markup = InlineKeyboardMarkup(row_width=1)
-    for i, m in enumerate(matches[:10]):
-        markup.add(InlineKeyboardButton(f"⚽ {m['home_team']} vs {m['away_team']}", callback_data=f"match_{league_key}_{i}"))
+    if matches:
+        for i, m in enumerate(matches[:10]):
+            markup.add(InlineKeyboardButton(f"⚽ {m['home_team']} vs {m['away_team']}", callback_data=f"match_{league_key}_{i}"))
+    else:
+        markup.add(InlineKeyboardButton("⚠️ Aucun match", callback_data="no_match"))
     markup.add(InlineKeyboardButton(texts["back"], callback_data="choose_league"))
     return markup
 
 def menu_matchs_jour(matches, lang="fr"):
     texts = LANGUAGES.get(lang, LANGUAGES["fr"])
     markup = InlineKeyboardMarkup(row_width=1)
-    for i, m in enumerate(matches[:20]):
-        date = m.get("commence_time", "")[:10] if m.get("commence_time") else "Date inconnue"
-        markup.add(InlineKeyboardButton(f"📅 {date} | {m['league_name']} : {m['home_team']} vs {m['away_team']}", callback_data=f"match_day_{i}"))
+    if matches:
+        for i, m in enumerate(matches[:20]):
+            date = m.get("commence_time", "")[:10] if m.get("commence_time") else "Date inconnue"
+            markup.add(InlineKeyboardButton(f"📅 {date} | {m['league_name']} : {m['home_team']} vs {m['away_team']}", callback_data=f"match_day_{i}"))
+    else:
+        markup.add(InlineKeyboardButton("⚠️ Aucun match", callback_data="no_match"))
     markup.add(InlineKeyboardButton(texts["back"], callback_data="menu_back"))
     return markup
 
 def menu_matchs_semaine(matches, lang="fr"):
     texts = LANGUAGES.get(lang, LANGUAGES["fr"])
     markup = InlineKeyboardMarkup(row_width=1)
-    for i, m in enumerate(matches[:30]):
-        date = m.get("commence_time", "")[:10] if m.get("commence_time") else "Date inconnue"
-        markup.add(InlineKeyboardButton(f"📅 {date} | {m['league_name']} : {m['home_team']} vs {m['away_team']}", callback_data=f"match_week_{i}"))
+    if matches:
+        for i, m in enumerate(matches[:30]):
+            date = m.get("commence_time", "")[:10] if m.get("commence_time") else "Date inconnue"
+            markup.add(InlineKeyboardButton(f"📅 {date} | {m['league_name']} : {m['home_team']} vs {m['away_team']}", callback_data=f"match_week_{i}"))
+    else:
+        markup.add(InlineKeyboardButton("⚠️ Aucun match", callback_data="no_match"))
     markup.add(InlineKeyboardButton(texts["back"], callback_data="menu_back"))
     return markup
 
@@ -749,7 +810,7 @@ def menu_match_actions(match_id, lang="fr"):
     return markup
 
 # ------------------------------------------------------------
-# 13. BOT TELEGRAM
+# 14. BOT TELEGRAM
 # ------------------------------------------------------------
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 bot.match_cache = {}
@@ -959,6 +1020,10 @@ def handle_callback(call):
             bot.send_message(chat_id, format_live_events(events), parse_mode="Markdown", reply_markup=menu_options(lang))
             return
 
+        if call.data == "no_match":
+            bot.answer_callback_query(call.id, "Aucun match disponible")
+            return
+
     except Exception as e:
         print(f"❌ Erreur callback: {e}")
         try:
@@ -967,7 +1032,7 @@ def handle_callback(call):
             pass
 
 # ------------------------------------------------------------
-# 14. GESTION DES MESSAGES TEXTE
+# 15. GESTION DES MESSAGES TEXTE
 # ------------------------------------------------------------
 @bot.message_handler(func=lambda message: True)
 def handle_text(message):
@@ -1094,7 +1159,7 @@ def handle_text(message):
         return
 
 # ------------------------------------------------------------
-# 15. SERVEUR HTTP FACTICE POUR RENDER
+# 16. SERVEUR HTTP FACTICE POUR RENDER
 # ------------------------------------------------------------
 from threading import Thread
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -1112,12 +1177,23 @@ def run_http():
 Thread(target=run_http, daemon=True).start()
 
 # ------------------------------------------------------------
-# 16. LANCEMENT
+# 17. LANCEMENT
 # ------------------------------------------------------------
 if __name__ == "__main__":
     init_db()
     print("✅ Base de données initialisée.")
+    
+    # Test de connectivité API
+    api_ok = test_api_connectivity()
+    if not api_ok:
+        print("⚠️ L'API Bzzoiro n'est pas accessible. Vérifie ta clé et ta connexion réseau.")
+        print("⚠️ Le bot continuera de fonctionner mais certaines fonctionnalités seront limitées.")
+    else:
+        print("✅ API Bzzoiro connectée.")
+    
+    # Démarrer les notifications
     threading.Thread(target=run_scheduler_notifications, daemon=True).start()
     print("⏰ Notifications programmées à 8h.")
+    
     print("✅ Bot démarré.")
     bot.infinity_polling()
