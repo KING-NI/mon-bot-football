@@ -12,10 +12,10 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 # ------------------------------------------------------------
 # 1. CONFIGURATION
 # ------------------------------------------------------------
-BZZOIRO_API_KEY = os.getenv("BZZOIRO_API_KEY", "633d50eb603d3d9845fb270244372396cb95263d")
+BZZOIRO_API_KEY = os.getenv("BZZOIRO_API_KEY", "")
 BZZOIRO_URL = "https://sports.bzzoiro.com/api/v2/"
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8602372536:AAEtG5qLBhOg97PfoneuWV9XWR0FSmQIYwU")
-CHAT_ID = os.getenv("CHAT_ID", "6842436232")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+CHAT_ID = os.getenv("CHAT_ID", "")
 
 # ------------------------------------------------------------
 # 2. TEST DE CONNECTIVITÉ API
