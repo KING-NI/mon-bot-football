@@ -17,23 +17,28 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID = os.getenv("CHAT_ID", "")
 
 # ------------------------------------------------------------
-# 2. CHAMPIONNATS (The Odds API)
+# 2. CHAMPIONNATS AVEC DRAPEAUX
 # ------------------------------------------------------------
 SPORTS = {
-    "Premier League": "soccer_epl",
-    "Ligue 1": "soccer_france_ligue_one",
-    "Bundesliga": "soccer_germany_bundesliga",
-    "La Liga": "soccer_spain_la_liga",
-    "Serie A": "soccer_italy_serie_a",
-    "Championship": "soccer_efl_champ",
-    "Eredivisie": "soccer_netherlands_eredivisie",
-    "Primeira Liga": "soccer_portugal_primeira_liga",
-    "MLS": "soccer_usa_mls",
-    "Brasil Serie A": "soccer_brazil_campeonato",
-    "J-League": "soccer_japan_j_league",
-    "Champions League": "soccer_uefa_champs_league",
-    "Europa League": "soccer_uefa_europa_league",
-    "Coupe du Monde": "soccer_fifa_world_cup",
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": "soccer_epl",
+    "🇫🇷 Ligue 1": "soccer_france_ligue_one",
+    "🇩🇪 Bundesliga": "soccer_germany_bundesliga",
+    "🇪🇸 La Liga": "soccer_spain_la_liga",
+    "🇮🇹 Serie A": "soccer_italy_serie_a",
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": "soccer_efl_champ",
+    "🇳🇱 Eredivisie": "soccer_netherlands_eredivisie",
+    "🇵🇹 Primeira Liga": "soccer_portugal_primeira_liga",
+    "🇧🇪 Pro League": "soccer_belgium_first_div",
+    "🇹🇷 Süper Lig": "soccer_turkey_super_league",
+    "🇺🇸 MLS": "soccer_usa_mls",
+    "🇧🇷 Brasil Serie A": "soccer_brazil_campeonato",
+    "🇲🇽 Liga MX": "soccer_mexico_ligamx",
+    "🇯🇵 J-League": "soccer_japan_j_league",
+    "🇰🇷 K-League": "soccer_korea_kleague1",
+    "🇦🇺 A-League": "soccer_australia_aleague",
+    "🏆 Champions League": "soccer_uefa_champs_league",
+    "🏆 Europa League": "soccer_uefa_europa_league",
+    "🌍 Coupe du Monde": "soccer_fifa_world_cup",
 }
 
 # ------------------------------------------------------------
@@ -44,7 +49,7 @@ def format_date(iso_date):
     if not iso_date:
         return "?"
     try:
-        date_part = iso_date[:10]  # Prend juste YYYY-MM-DD
+        date_part = iso_date[:10]
         return datetime.strptime(date_part, "%Y-%m-%d").strftime("%d/%m/%Y")
     except:
         return iso_date[:10] if len(iso_date) >= 10 else "?"
@@ -57,7 +62,7 @@ LANGUAGES = {
         "welcome": "👋 *Bienvenue sur KING NI Predict Bot !*\n\nChoisis une option ci-dessous :",
         "menu_pred_today": "🔮 Pronostics du jour",
         "menu_by_league": "🏆 Par championnat",
-        "menu_coming": "📅 Matchs à venir",
+        "menu_week": "📅 Pronostics de la semaine",
         "menu_search": "⚽ Rechercher une équipe",
         "menu_stats": "📊 Statistiques",
         "menu_live": "📡 En direct",
@@ -76,7 +81,7 @@ LANGUAGES = {
         "welcome": "👋 *Welcome to KING NI Predict Bot !*\n\nChoose an option below :",
         "menu_pred_today": "🔮 Today's predictions",
         "menu_by_league": "🏆 By league",
-        "menu_coming": "📅 Upcoming matches",
+        "menu_week": "📅 Week's predictions",
         "menu_search": "⚽ Search team",
         "menu_stats": "📊 Statistics",
         "menu_live": "📡 Live",
@@ -95,7 +100,7 @@ LANGUAGES = {
         "welcome": "👋 *¡Bienvenido a KING NI Predict Bot !*\n\nElige una opción a continuación :",
         "menu_pred_today": "🔮 Pronósticos de hoy",
         "menu_by_league": "🏆 Por liga",
-        "menu_coming": "📅 Próximos partidos",
+        "menu_week": "📅 Pronósticos de la semana",
         "menu_search": "⚽ Buscar equipo",
         "menu_stats": "📊 Estadísticas",
         "menu_live": "📡 En directo",
@@ -191,9 +196,6 @@ def get_matches_for_league(sport_key, markets="h2h"):
     return matches, None
 
 def get_all_matches(days_ahead=None):
-    """Récupère les matchs. Si days_ahead est None, pas de filtre.
-       Si days_ahead=0 : aujourd'hui uniquement.
-       Si days_ahead=7 : 7 prochains jours."""
     all_matches = []
     today = datetime.now().date()
     
@@ -202,15 +204,14 @@ def get_all_matches(days_ahead=None):
         if error or not matches:
             continue
         for m in matches:
+            m["league_name"] = nom  # Utiliser le nom avec drapeau
             if days_ahead is None:
-                m["league_name"] = nom
                 all_matches.append(m)
             else:
                 try:
                     match_date = datetime.strptime(m.get("commence_time", "")[:10], "%Y-%m-%d").date()
                     limit = today + timedelta(days=days_ahead)
                     if today <= match_date <= limit:
-                        m["league_name"] = nom
                         all_matches.append(m)
                 except:
                     continue
@@ -399,8 +400,8 @@ def menu_options(lang="fr"):
     markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     markup.add(
         KeyboardButton(texts["menu_pred_today"]),
+        KeyboardButton(texts["menu_week"]),
         KeyboardButton(texts["menu_by_league"]),
-        KeyboardButton(texts["menu_coming"]),
         KeyboardButton(texts["menu_search"]),
         KeyboardButton(texts["menu_stats"]),
         KeyboardButton(texts["menu_live"]),
@@ -492,7 +493,10 @@ def handle_callback(call):
             if error or not matches:
                 bot.edit_message_text(error or texts["no_matches"], chat_id, loading.message_id)
                 return
+            # Trouver le nom avec drapeau
+            nom_ligue = next((k for k, v in SPORTS.items() if v == sport_key), sport_key)
             for i, m in enumerate(matches[:10]):
+                m["league_name"] = nom_ligue
                 bot.match_cache[f"match_{sport_key}_{i}"] = m
             bot.delete_message(chat_id, loading.message_id)
             bot.send_message(chat_id, texts["choose_match"], parse_mode="Markdown", reply_markup=menu_matchs_inline(sport_key, matches, lang))
@@ -502,7 +506,7 @@ def handle_callback(call):
                 bot.send_message(chat_id, "❌ Match introuvable.")
                 return
             bot.current_match_data[call.data] = match
-            bot.send_message(chat_id, f"⚽ *{match['home_team']} vs {match['away_team']}*", parse_mode="Markdown", reply_markup=menu_match_actions(call.data, lang))
+            bot.send_message(chat_id, f"⚽ *{match['home_team']} vs {match['away_team']}*\n🏆 {match.get('league_name', '')}", parse_mode="Markdown", reply_markup=menu_match_actions(call.data, lang))
         elif call.data.startswith("market_"):
             parts = call.data.replace("market_", "").split("_")
             market_type = parts[-1]
@@ -546,7 +550,7 @@ def handle_text(message):
         bot.day_matches = []
         send_welcome(message)
     elif text == texts["menu_pred_today"]:
-        # Aujourd'hui + demain (2 jours)
+        # Pronostics du jour : 1 jour
         loading = bot.reply_to(message, texts["loading"], parse_mode="Markdown")
         all_matches = get_all_matches(days_ahead=1)
         if not all_matches:
@@ -557,8 +561,8 @@ def handle_text(message):
             bot.match_cache[f"match_day_{i}"] = m
         bot.delete_message(chat_id, loading.message_id)
         bot.send_message(chat_id, f"🔮 *Pronostics du jour*\n\n{len(bot.day_matches)} matchs :", parse_mode="Markdown", reply_markup=menu_matchs_list(bot.day_matches, "match_day", lang))
-    elif text == texts["menu_coming"]:
-        # 7 prochains jours
+    elif text == texts["menu_week"]:
+        # Pronostics de la semaine : 7 jours
         loading = bot.reply_to(message, texts["loading"], parse_mode="Markdown")
         all_matches = get_all_matches(days_ahead=7)
         if not all_matches:
@@ -568,7 +572,7 @@ def handle_text(message):
         for i, m in enumerate(bot.day_matches):
             bot.match_cache[f"match_day_{i}"] = m
         bot.delete_message(chat_id, loading.message_id)
-        bot.send_message(chat_id, f"📅 *Matchs à venir (7 jours)*\n\n{len(bot.day_matches)} matchs :", parse_mode="Markdown", reply_markup=menu_matchs_list(bot.day_matches, "match_day", lang))
+        bot.send_message(chat_id, f"📅 *Pronostics de la semaine*\n\n{len(bot.day_matches)} matchs :", parse_mode="Markdown", reply_markup=menu_matchs_list(bot.day_matches, "match_day", lang))
     elif text == texts["menu_by_league"]:
         bot.reply_to(message, texts["choose_league"], parse_mode="Markdown", reply_markup=menu_ligues_inline(lang))
     elif text == texts["menu_search"]:
