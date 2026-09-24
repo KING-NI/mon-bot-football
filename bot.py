@@ -628,4 +628,4 @@ if __name__ == "__main__":
     threading.Thread(target=run_scheduler, daemon=True).start()
     print("⏰ Notifications programmées à 8h.")
     print("✅ Bot démarré.")
-    bot.infinity_polling()c
+    bot.infinity_polling()
