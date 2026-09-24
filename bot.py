@@ -11,17 +11,15 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 # ------------------------------------------------------------
 # 1. CONFIGURATION
 # ------------------------------------------------------------
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")  # Ta clé RapidAPI
-RAPIDAPI_HOST = "api-football-v1.p.rapidapi.com"
-API_BASE_URL = f"https://{RAPIDAPI_HOST}/v3"
+API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "")  # Ta clé API-Football directe
+API_BASE_URL = "https://v3.football.api-sports.io"
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID = os.getenv("CHAT_ID", "")
 
 # ------------------------------------------------------------
-# 2. LIGUES (API-Football)
+# 2. LIGUES (API-Football - IDs officiels)
 # ------------------------------------------------------------
-# Format : { "Nom affiché": league_id }
 LEAGUES = {
     "Premier League": 39,
     "Ligue 1": 61,
@@ -134,9 +132,8 @@ def init_db():
     conn.close()
 
 # ------------------------------------------------------------
-# 5. FONCTIONS API-FOOTBALL
+# 5. FONCTIONS API-FOOTBALL (avec cache)
 # ------------------------------------------------------------
-# Système de cache pour économiser les requêtes (quota : 100/jour)
 _cache = {}
 _cache_ttl = {}
 
@@ -144,24 +141,25 @@ def api_request(endpoint, params=None, cache_ttl=300):
     """Requête avec cache pour économiser le quota (100 req/jour)."""
     cache_key = f"{endpoint}_{str(params)}"
     now = time.time()
-    
-    # Vérifier le cache
+
     if cache_key in _cache and cache_key in _cache_ttl:
         if now - _cache_ttl[cache_key] < cache_ttl:
             return _cache[cache_key]
-    
-    # Faire la requête
+
     headers = {
-        "X-RapidAPI-Key": RAPIDAPI_KEY,
-        "X-RapidAPI-Host": RAPIDAPI_HOST,
+        "x-apisports-key": API_FOOTBALL_KEY,
     }
     url = f"{API_BASE_URL}/{endpoint}"
-    
+
     for attempt in range(2):
         try:
             response = requests.get(url, headers=headers, params=params, timeout=15)
             if response.status_code == 200:
                 data = response.json()
+                # Vérifier si l'API renvoie une erreur dans la réponse
+                if "errors" in data and data["errors"]:
+                    print(f"⚠️ API-Football erreur: {data['errors']}")
+                    return None
                 _cache[cache_key] = data
                 _cache_ttl[cache_key] = now
                 return data
@@ -178,7 +176,7 @@ def get_matches_for_league(league_id, date_from=None, date_to=None):
         date_from = datetime.now().strftime("%Y-%m-%d")
     if date_to is None:
         date_to = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
-    
+
     params = {
         "league": league_id,
         "from": date_from,
@@ -186,10 +184,10 @@ def get_matches_for_league(league_id, date_from=None, date_to=None):
         "season": datetime.now().year,
     }
     data = api_request("fixtures", params=params, cache_ttl=600)
-    
+
     if not data or "response" not in data:
         return None, "⚠️ Impossible de contacter l'API."
-    
+
     matches = []
     for fixture in data["response"]:
         matches.append({
@@ -199,7 +197,7 @@ def get_matches_for_league(league_id, date_from=None, date_to=None):
             "league_name": fixture["league"]["name"],
             "commence_time": fixture["fixture"]["date"],
         })
-    
+
     if not matches:
         return None, "ℹ️ Aucun match pour ce championnat."
     return matches, None
@@ -217,26 +215,26 @@ def get_market_predictions(fixture_id, market_type="h2h"):
         pred_data = get_fixture_predictions(fixture_id)
         if not pred_data:
             return {"error": "Prédiction non disponible."}
-        
+
         predictions = pred_data.get("predictions", {})
         percent = predictions.get("percent", {})
-        
+
         if market_type == "h2h":
             home_pct = percent.get("home", "0%").replace("%", "")
             draw_pct = percent.get("draw", "0%").replace("%", "")
             away_pct = percent.get("away", "0%").replace("%", "")
-            
+
             prob_home = float(home_pct) if home_pct else 0
             prob_draw = float(draw_pct) if draw_pct else 0
             prob_away = float(away_pct) if away_pct else 0
-            
+
             if prob_home > prob_away and prob_home > prob_draw:
-                pred = f"🏠 Victoire domicile"
+                pred = "🏠 Victoire domicile"
             elif prob_away > prob_home and prob_away > prob_draw:
-                pred = f"✈️ Victoire extérieur"
+                pred = "✈️ Victoire extérieur"
             else:
                 pred = "🤝 Nul"
-            
+
             return {
                 "type": "1X2",
                 "prob_home": prob_home,
@@ -329,7 +327,7 @@ def search_team(team_name):
     team_clean = team_name.strip().lower()
     if not team_clean:
         return "❌ Entre un nom d'équipe valide."
-    
+
     for nom, league_id in LEAGUES.items():
         matches, error = get_matches_for_league(league_id)
         if error or not matches:
@@ -354,7 +352,7 @@ def send_notifications():
     cursor.execute('SELECT DISTINCT user_id FROM followed_teams')
     users = cursor.fetchall()
     conn.close()
-    
+
     for (user_id,) in users:
         teams = get_followed_teams(user_id)
         for (team_name,) in teams:
@@ -532,7 +530,6 @@ def handle_text(message):
         send_welcome(message)
     elif text == texts["menu_pred_today"]:
         loading = bot.reply_to(message, texts["loading"], parse_mode="Markdown")
-        # Récupérer les matchs du jour pour toutes les ligues
         all_matches = []
         for nom, league_id in LEAGUES.items():
             matches, error = get_matches_for_league(league_id)
@@ -631,4 +628,4 @@ if __name__ == "__main__":
     threading.Thread(target=run_scheduler, daemon=True).start()
     print("⏰ Notifications programmées à 8h.")
     print("✅ Bot démarré.")
-    bot.infinity_polling()
+    bot.infinity_polling()c
