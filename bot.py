@@ -193,7 +193,6 @@ def get_matches_for_league(sport_key, markets="h2h"):
             "commence_time": event.get("commence_time", datetime.now().isoformat()),
             "bookmakers": event.get("bookmakers", [])
         })
-    # Trier par date
     matches.sort(key=lambda x: x.get("commence_time", ""))
     return matches, None
 
@@ -218,9 +217,7 @@ def get_all_matches(days_ahead=None):
                 except:
                     continue
     
-    # ✅ TRIER PAR DATE CROISSANTE
     all_matches.sort(key=lambda x: x.get("commence_time", ""))
-    
     return all_matches
 
 # ------------------------------------------------------------
@@ -370,6 +367,31 @@ def search_team(team_name):
     return "\n\n".join(resultats)
 
 # ------------------------------------------------------------
+# 9b. LOGOS DES ÉQUIPES (TheSportsDB - gratuit)
+# ------------------------------------------------------------
+_team_logo_cache = {}
+
+def get_team_logo(team_name):
+    """Récupère l'URL du logo d'une équipe via TheSportsDB (gratuit)."""
+    if team_name in _team_logo_cache:
+        return _team_logo_cache[team_name]
+    
+    try:
+        url = f"https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t={team_name.replace(' ', '%20')}"
+        response = requests.get(url, timeout=8)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("teams"):
+                logo = data["teams"][0].get("strTeamBadge") or data["teams"][0].get("strTeamLogo")
+                _team_logo_cache[team_name] = logo
+                return logo
+    except Exception as e:
+        print(f"⚠️ Erreur logo {team_name}: {e}")
+    
+    _team_logo_cache[team_name] = None
+    return None
+
+# ------------------------------------------------------------
 # 10. NOTIFICATIONS
 # ------------------------------------------------------------
 def send_notifications():
@@ -450,6 +472,7 @@ def menu_match_actions(match_id, lang="fr"):
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(InlineKeyboardButton("🔮 1X2", callback_data=f"market_{match_id}_h2h"))
     markup.add(InlineKeyboardButton("📈 Over/Under", callback_data=f"market_{match_id}_totals"))
+    markup.add(InlineKeyboardButton("🖼️ Voir les logos", callback_data=f"logos_{match_id}"))
     markup.add(InlineKeyboardButton(texts["back"], callback_data="back_to_matches"))
     return markup
 
@@ -512,6 +535,42 @@ def handle_callback(call):
                 return
             bot.current_match_data[call.data] = match
             bot.send_message(chat_id, f"⚽ *{match['home_team']} vs {match['away_team']}*\n🏆 {match.get('league_name', '')}", parse_mode="Markdown", reply_markup=menu_match_actions(call.data, lang))
+        elif call.data.startswith("logos_"):
+            match_id = call.data.replace("logos_", "")
+            match = bot.current_match_data.get(match_id) or bot.match_cache.get(match_id)
+            if not match:
+                bot.send_message(chat_id, "❌ Match introuvable.")
+                return
+            
+            loading = bot.send_message(chat_id, "⏳ *Récupération des logos...*", parse_mode="Markdown")
+            
+            home_logo = get_team_logo(match['home_team'])
+            away_logo = get_team_logo(match['away_team'])
+            
+            bot.delete_message(chat_id, loading.message_id)
+            
+            if home_logo and away_logo:
+                try:
+                    bot.send_photo(chat_id, home_logo, caption=f"🏠 *{match['home_team']}*", parse_mode="Markdown")
+                except:
+                    pass
+                try:
+                    bot.send_photo(chat_id, away_logo, caption=f"✈️ *{match['away_team']}*", parse_mode="Markdown")
+                except:
+                    pass
+                bot.send_message(chat_id, f"⚽ *{match['home_team']} vs {match['away_team']}*", parse_mode="Markdown", reply_markup=menu_match_actions(match_id, lang))
+            elif home_logo:
+                try:
+                    bot.send_photo(chat_id, home_logo, caption=f"🏠 *{match['home_team']}*\n_(Logo de {match['away_team']} introuvable)_", parse_mode="Markdown", reply_markup=menu_match_actions(match_id, lang))
+                except:
+                    bot.send_message(chat_id, "❌ Impossible d'envoyer le logo.")
+            elif away_logo:
+                try:
+                    bot.send_photo(chat_id, away_logo, caption=f"✈️ *{match['away_team']}*\n_(Logo de {match['home_team']} introuvable)_", parse_mode="Markdown", reply_markup=menu_match_actions(match_id, lang))
+                except:
+                    bot.send_message(chat_id, "❌ Impossible d'envoyer le logo.")
+            else:
+                bot.send_message(chat_id, "❌ Logos non disponibles pour ce match.", reply_markup=menu_match_actions(match_id, lang))
         elif call.data.startswith("market_"):
             parts = call.data.replace("market_", "").split("_")
             market_type = parts[-1]
