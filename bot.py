@@ -193,6 +193,8 @@ def get_matches_for_league(sport_key, markets="h2h"):
             "commence_time": event.get("commence_time", datetime.now().isoformat()),
             "bookmakers": event.get("bookmakers", [])
         })
+    # Trier par date
+    matches.sort(key=lambda x: x.get("commence_time", ""))
     return matches, None
 
 def get_all_matches(days_ahead=None):
@@ -204,7 +206,7 @@ def get_all_matches(days_ahead=None):
         if error or not matches:
             continue
         for m in matches:
-            m["league_name"] = nom  # Utiliser le nom avec drapeau
+            m["league_name"] = nom
             if days_ahead is None:
                 all_matches.append(m)
             else:
@@ -215,6 +217,10 @@ def get_all_matches(days_ahead=None):
                         all_matches.append(m)
                 except:
                     continue
+    
+    # ✅ TRIER PAR DATE CROISSANTE
+    all_matches.sort(key=lambda x: x.get("commence_time", ""))
+    
     return all_matches
 
 # ------------------------------------------------------------
@@ -493,7 +499,6 @@ def handle_callback(call):
             if error or not matches:
                 bot.edit_message_text(error or texts["no_matches"], chat_id, loading.message_id)
                 return
-            # Trouver le nom avec drapeau
             nom_ligue = next((k for k, v in SPORTS.items() if v == sport_key), sport_key)
             for i, m in enumerate(matches[:10]):
                 m["league_name"] = nom_ligue
@@ -550,7 +555,6 @@ def handle_text(message):
         bot.day_matches = []
         send_welcome(message)
     elif text == texts["menu_pred_today"]:
-        # Pronostics du jour : 1 jour
         loading = bot.reply_to(message, texts["loading"], parse_mode="Markdown")
         all_matches = get_all_matches(days_ahead=1)
         if not all_matches:
@@ -562,7 +566,6 @@ def handle_text(message):
         bot.delete_message(chat_id, loading.message_id)
         bot.send_message(chat_id, f"🔮 *Pronostics du jour*\n\n{len(bot.day_matches)} matchs :", parse_mode="Markdown", reply_markup=menu_matchs_list(bot.day_matches, "match_day", lang))
     elif text == texts["menu_week"]:
-        # Pronostics de la semaine : 7 jours
         loading = bot.reply_to(message, texts["loading"], parse_mode="Markdown")
         all_matches = get_all_matches(days_ahead=7)
         if not all_matches:
