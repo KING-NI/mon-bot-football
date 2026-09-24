@@ -37,7 +37,20 @@ SPORTS = {
 }
 
 # ------------------------------------------------------------
-# 3. MULTILINGUE
+# 3. UTILITAIRE DE DATE
+# ------------------------------------------------------------
+def format_date(iso_date):
+    """Convertit 2026-10-10T15:00:00Z en 10/10/2026."""
+    if not iso_date:
+        return "?"
+    try:
+        date_part = iso_date[:10]  # Prend juste YYYY-MM-DD
+        return datetime.strptime(date_part, "%Y-%m-%d").strftime("%d/%m/%Y")
+    except:
+        return iso_date[:10] if len(iso_date) >= 10 else "?"
+
+# ------------------------------------------------------------
+# 4. MULTILINGUE
 # ------------------------------------------------------------
 LANGUAGES = {
     "fr": {
@@ -109,7 +122,7 @@ def detect_language(message):
     return lang
 
 # ------------------------------------------------------------
-# 4. BASE DE DONNÉES
+# 5. BASE DE DONNÉES
 # ------------------------------------------------------------
 def init_db():
     conn = sqlite3.connect('predictions.db')
@@ -136,7 +149,7 @@ def init_db():
     conn.close()
 
 # ------------------------------------------------------------
-# 5. FONCTIONS THE ODDS API
+# 6. FONCTIONS THE ODDS API
 # ------------------------------------------------------------
 def odds_request(endpoint, params=None, retries=3):
     if params is None:
@@ -177,22 +190,34 @@ def get_matches_for_league(sport_key, markets="h2h"):
         })
     return matches, None
 
-def get_all_matches():
+def get_all_matches(days_ahead=None):
+    """Récupère les matchs. Si days_ahead est None, pas de filtre.
+       Si days_ahead=0 : aujourd'hui uniquement.
+       Si days_ahead=7 : 7 prochains jours."""
     all_matches = []
+    today = datetime.now().date()
+    
     for nom, cle in SPORTS.items():
         matches, error = get_matches_for_league(cle, "h2h")
         if error or not matches:
             continue
         for m in matches:
-            m["league_name"] = nom
-            all_matches.append(m)
+            if days_ahead is None:
+                m["league_name"] = nom
+                all_matches.append(m)
+            else:
+                try:
+                    match_date = datetime.strptime(m.get("commence_time", "")[:10], "%Y-%m-%d").date()
+                    limit = today + timedelta(days=days_ahead)
+                    if today <= match_date <= limit:
+                        m["league_name"] = nom
+                        all_matches.append(m)
+                except:
+                    continue
     return all_matches
 
-def get_matches_next_days(days=7):
-    return get_all_matches()
-
 # ------------------------------------------------------------
-# 6. MARCHÉS ET PRONOSTICS
+# 7. MARCHÉS ET PRONOSTICS
 # ------------------------------------------------------------
 def generate_progress_bar(value, total=100, length=10):
     filled = int((value / total) * length)
@@ -281,7 +306,7 @@ def calculate_backtest(user_id=None, days=30):
     return get_stats(user_id)
 
 # ------------------------------------------------------------
-# 7. UTILISATEURS ET SUIVI
+# 8. UTILISATEURS ET SUIVI
 # ------------------------------------------------------------
 def register_user(user_id, chat_id, username, lang="fr"):
     conn = sqlite3.connect('predictions.db')
@@ -315,22 +340,15 @@ def get_followed_teams(user_id):
     conn.close()
     return rows
 
-def remove_followed_team(user_id, team_name):
-    conn = sqlite3.connect('predictions.db')
-    cursor = conn.cursor()
-    cursor.execute('DELETE FROM followed_teams WHERE user_id = ? AND team_name = ?', (user_id, team_name))
-    conn.commit()
-    conn.close()
-
 # ------------------------------------------------------------
-# 8. RECHERCHE D'ÉQUIPE
+# 9. RECHERCHE D'ÉQUIPE
 # ------------------------------------------------------------
 def search_team(team_name):
     resultats = []
     team_clean = team_name.strip().lower()
     if not team_clean:
         return "❌ Entre un nom d'équipe valide."
-    matches = get_all_matches()
+    matches = get_all_matches(days_ahead=None)
     if not matches:
         return "⚠️ Aucun match trouvé."
     for match in matches:
@@ -338,14 +356,14 @@ def search_team(team_name):
             pred = get_market_predictions(match, "h2h")
             if "error" in pred:
                 continue
-            date_str = match.get("commence_time", "")[:10] if match.get("commence_time") else "Date inconnue"
+            date_str = format_date(match.get("commence_time", ""))
             resultats.append(f"📅 {date_str} | {match['league_name']}\n⚽ {match['home_team']} vs {match['away_team']}\n   🏠 {pred['prob_home']:.1f}% {generate_progress_bar(pred['prob_home'])}\n   🤝 Nul : {pred['prob_draw']:.1f}% {generate_progress_bar(pred['prob_draw'])}\n   ✈️ {pred['prob_away']:.1f}% {generate_progress_bar(pred['prob_away'])}\n   ✅ *{pred['prediction']}*\n")
     if not resultats:
         return f"❌ Aucun match pour *{team_name}*."
     return "\n\n".join(resultats)
 
 # ------------------------------------------------------------
-# 9. NOTIFICATIONS
+# 10. NOTIFICATIONS
 # ------------------------------------------------------------
 def send_notifications():
     conn = sqlite3.connect('predictions.db')
@@ -356,7 +374,7 @@ def send_notifications():
     for (user_id,) in users:
         teams = get_followed_teams(user_id)
         for (team_name,) in teams:
-            matches = get_all_matches()
+            matches = get_all_matches(days_ahead=7)
             for match in matches:
                 if team_name.lower() in match['home_team'].lower() or team_name.lower() in match['away_team'].lower():
                     pred = get_market_predictions(match, "h2h")
@@ -374,7 +392,7 @@ def run_scheduler():
         time.sleep(60)
 
 # ------------------------------------------------------------
-# 10. MENUS
+# 11. MENUS
 # ------------------------------------------------------------
 def menu_options(lang="fr"):
     texts = LANGUAGES.get(lang, LANGUAGES["fr"])
@@ -406,7 +424,8 @@ def menu_matchs_inline(league_key, matches, lang="fr"):
     texts = LANGUAGES.get(lang, LANGUAGES["fr"])
     markup = InlineKeyboardMarkup(row_width=1)
     for i, m in enumerate(matches[:10]):
-        markup.add(InlineKeyboardButton(f"⚽ {m['home_team']} vs {m['away_team']}", callback_data=f"match_{league_key}_{i}"))
+        date = format_date(m.get("commence_time", ""))
+        markup.add(InlineKeyboardButton(f"📅 {date} | {m['home_team']} vs {m['away_team']}", callback_data=f"match_{league_key}_{i}"))
     markup.add(InlineKeyboardButton(texts["back"], callback_data="choose_league"))
     return markup
 
@@ -414,7 +433,7 @@ def menu_matchs_list(matches, prefix="match_day", lang="fr"):
     texts = LANGUAGES.get(lang, LANGUAGES["fr"])
     markup = InlineKeyboardMarkup(row_width=1)
     for i, m in enumerate(matches[:20]):
-        date = m.get("commence_time", "")[:10] if m.get("commence_time") else "?"
+        date = format_date(m.get("commence_time", ""))
         markup.add(InlineKeyboardButton(f"📅 {date} | {m['home_team']} vs {m['away_team']}", callback_data=f"{prefix}_{i}"))
     markup.add(InlineKeyboardButton(texts["back"], callback_data="menu_back"))
     return markup
@@ -428,7 +447,7 @@ def menu_match_actions(match_id, lang="fr"):
     return markup
 
 # ------------------------------------------------------------
-# 11. BOT TELEGRAM
+# 12. BOT TELEGRAM
 # ------------------------------------------------------------
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 bot.match_cache = {}
@@ -527,10 +546,11 @@ def handle_text(message):
         bot.day_matches = []
         send_welcome(message)
     elif text == texts["menu_pred_today"]:
+        # Aujourd'hui + demain (2 jours)
         loading = bot.reply_to(message, texts["loading"], parse_mode="Markdown")
-        all_matches = get_all_matches()
+        all_matches = get_all_matches(days_ahead=1)
         if not all_matches:
-            bot.edit_message_text(texts["no_matches"], chat_id, loading.message_id)
+            bot.edit_message_text("⚠️ Aucun match aujourd'hui ou demain.", chat_id, loading.message_id)
             return
         bot.day_matches = all_matches[:20]
         for i, m in enumerate(bot.day_matches):
@@ -538,16 +558,17 @@ def handle_text(message):
         bot.delete_message(chat_id, loading.message_id)
         bot.send_message(chat_id, f"🔮 *Pronostics du jour*\n\n{len(bot.day_matches)} matchs :", parse_mode="Markdown", reply_markup=menu_matchs_list(bot.day_matches, "match_day", lang))
     elif text == texts["menu_coming"]:
+        # 7 prochains jours
         loading = bot.reply_to(message, texts["loading"], parse_mode="Markdown")
-        all_matches = get_all_matches()
+        all_matches = get_all_matches(days_ahead=7)
         if not all_matches:
-            bot.edit_message_text(texts["no_matches"], chat_id, loading.message_id)
+            bot.edit_message_text("⚠️ Aucun match dans les 7 prochains jours.", chat_id, loading.message_id)
             return
         bot.day_matches = all_matches[:30]
         for i, m in enumerate(bot.day_matches):
             bot.match_cache[f"match_day_{i}"] = m
         bot.delete_message(chat_id, loading.message_id)
-        bot.send_message(chat_id, f"📅 *Matchs à venir*\n\n{len(bot.day_matches)} matchs :", parse_mode="Markdown", reply_markup=menu_matchs_list(bot.day_matches, "match_day", lang))
+        bot.send_message(chat_id, f"📅 *Matchs à venir (7 jours)*\n\n{len(bot.day_matches)} matchs :", parse_mode="Markdown", reply_markup=menu_matchs_list(bot.day_matches, "match_day", lang))
     elif text == texts["menu_by_league"]:
         bot.reply_to(message, texts["choose_league"], parse_mode="Markdown", reply_markup=menu_ligues_inline(lang))
     elif text == texts["menu_search"]:
@@ -587,7 +608,7 @@ def handle_text(message):
         bot.edit_message_text(result, chat_id, loading.message_id, parse_mode="Markdown", reply_markup=menu_options(lang))
 
 # ------------------------------------------------------------
-# 12. SERVEUR HTTP POUR RENDER
+# 13. SERVEUR HTTP POUR RENDER
 # ------------------------------------------------------------
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -606,7 +627,7 @@ def run_http():
 threading.Thread(target=run_http, daemon=True).start()
 
 # ------------------------------------------------------------
-# 13. LANCEMENT
+# 14. LANCEMENT
 # ------------------------------------------------------------
 if __name__ == "__main__":
     init_db()
