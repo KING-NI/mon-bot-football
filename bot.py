@@ -39,7 +39,7 @@ POPULAR_LEAGUES = {
 }
 
 # ------------------------------------------------------------
-# 3. TRADUCTION COMPLÈTE DES TERMES API
+# 3. TRADUCTION DES TERMES API
 # ------------------------------------------------------------
 API_TERMS = {
     "fr": {
@@ -103,17 +103,44 @@ def at(lang, key):
     return API_TERMS.get(lang, API_TERMS["fr"]).get(key, key)
 
 def translate_advice(advice, lang):
-    """Traduit COMPLÈTEMENT les conseils API-Football."""
+    """Traduit et reformule les conseils API-Football."""
     if not advice:
         return advice
+    
+    # ===== ÉTAPE 1 : Détection et reformulation AVANT traduction =====
+    # Format "Double chance : Team or draw" ou "Double chance : Team ou nul"
+    reformulated_team = None
+    
+    # Cas anglais : "Double chance : X or draw"
+    if "Double chance" in advice and (" or draw" in advice or " ou nul" in advice):
+        try:
+            # Extraire l'équipe
+            after_colon = advice.split(":", 1)[-1].strip() if ":" in advice else advice
+            team = after_colon.replace(" or draw", "").replace(" ou nul", "").strip()
+            if team:
+                reformulated_team = team
+        except:
+            pass
+    
+    # Si on a détecté le format "Double chance", reformuler directement
+    if reformulated_team:
+        if lang == "fr":
+            return f"Victoire ou nul de {reformulated_team}"
+        elif lang == "en":
+            return f"Win or draw for {reformulated_team}"
+        elif lang == "es":
+            return f"Victoria o empate de {reformulated_team}"
+        elif lang == "pt":
+            return f"Vitória ou empate do {reformulated_team}"
+        elif lang == "ar":
+            return f"فوز أو تعادل لـ {reformulated_team}"
+    
+    # ===== ÉTAPE 2 : Traduction normale (autres cas) =====
     if lang == "en":
         return advice
     
-    # Traductions complètes des phrases
     replacements = {
         "fr": [
-            ("Combo Double chance", "Combo Double opportunité"),
-            ("Double chance", "Double opportunité"),
             ("Win or draw", "Victoire ou Nul"),
             ("Winner:", "Vainqueur :"),
             ("Winner :", "Vainqueur :"),
@@ -122,16 +149,10 @@ def translate_advice(advice, lang):
             ("goals", "buts"),
             ("goal", "but"),
             ("draw", "nul"),
-            ("win", "victoire"),
-            ("loss", "défaite"),
-            ("home", "domicile"),
-            ("away", "extérieur"),
             ("Both teams to score", "Les deux équipes marquent"),
             ("BTTS", "Les deux marquent"),
         ],
         "es": [
-            ("Combo Double chance", "Combo Doble oportunidad"),
-            ("Double chance", "Doble oportunidad"),
             ("Win or draw", "Victoria o Empate"),
             ("Winner:", "Ganador:"),
             ("Winner :", "Ganador:"),
@@ -140,16 +161,10 @@ def translate_advice(advice, lang):
             ("goals", "goles"),
             ("goal", "gol"),
             ("draw", "empate"),
-            ("win", "victoria"),
-            ("loss", "derrota"),
-            ("home", "local"),
-            ("away", "visitante"),
             ("Both teams to score", "Ambos equipos marcan"),
             ("BTTS", "Ambos marcan"),
         ],
         "pt": [
-            ("Combo Double chance", "Combo Dupla oportunidade"),
-            ("Double chance", "Dupla oportunidade"),
             ("Win or draw", "Vitória ou Empate"),
             ("Winner:", "Vencedor:"),
             ("Winner :", "Vencedor:"),
@@ -158,16 +173,10 @@ def translate_advice(advice, lang):
             ("goals", "golos"),
             ("goal", "golo"),
             ("draw", "empate"),
-            ("win", "vitória"),
-            ("loss", "derrota"),
-            ("home", "casa"),
-            ("away", "fora"),
             ("Both teams to score", "Ambas equipas marcam"),
             ("BTTS", "Ambas marcam"),
         ],
         "ar": [
-            ("Combo Double chance", "فرصة مزدوجة مركبة"),
-            ("Double chance", "فرصة مزدوجة"),
             ("Win or draw", "فوز أو تعادل"),
             ("Winner:", "الفائز:"),
             ("Winner :", "الفائز:"),
@@ -176,10 +185,6 @@ def translate_advice(advice, lang):
             ("goals", "أهداف"),
             ("goal", "هدف"),
             ("draw", "تعادل"),
-            ("win", "فوز"),
-            ("loss", "خسارة"),
-            ("home", "المنزل"),
-            ("away", "الخارج"),
             ("Both teams to score", "كلا الفريقين يسجلان"),
             ("BTTS", "كلا الفريقين يسجلان"),
         ],
@@ -1060,6 +1065,6 @@ threading.Thread(target=run_http, daemon=True).start()
 if __name__ == "__main__":
     init_db()
     print("✅ Base de données initialisée.")
-    print(f"⚽ API-Football - Traduction complète")
+    print("⚽ API-Football - Reformulation conseils")
     print("✅ Bot démarré.")
     bot.infinity_polling()
