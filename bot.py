@@ -20,57 +20,39 @@ CHAT_ID = os.getenv("CHAT_ID", "")
 # 2. TRADUCTION DES LIGUES EN FRANÇAIS
 # ------------------------------------------------------------
 LEAGUES_FR = {
-    # Angleterre
     "EPL": "Premier League - Angleterre",
     "Premier League": "Premier League - Angleterre",
     "Championship": "Championnat - Angleterre (D2)",
     "EFL Cup": "Coupe de la Ligue anglaise",
     "League 1": "League One - Angleterre (D3)",
     "League 2": "League Two - Angleterre (D4)",
-    # France
     "Ligue 1 - France": "Ligue 1 - France",
     "Ligue 2 - France": "Ligue 2 - France",
-    # Allemagne
     "Bundesliga - Germany": "Bundesliga - Allemagne",
     "Bundesliga 2 - Germany": "Bundesliga 2 - Allemagne",
     "3. Liga - Germany": "3. Liga - Allemagne",
     "DFB-Pokal": "Coupe d'Allemagne",
     "Frauen-Bundesliga": "Bundesliga féminine - Allemagne",
-    # Espagne
     "La Liga - Spain": "Liga - Espagne",
     "La Liga 2 - Spain": "Liga 2 - Espagne",
-    # Italie
     "Serie A - Italy": "Serie A - Italie",
     "Serie B - Italy": "Serie B - Italie",
-    # Portugal
     "Primeira Liga - Portugal": "Liga Portugal",
-    # Pays-Bas
     "Dutch Eredivisie": "Eredivisie - Pays-Bas",
-    # Belgique
     "Belgium First Div": "Pro League - Belgique",
-    # Écosse
     "Premiership - Scotland": "Premiership - Écosse",
-    # Suisse
     "Swiss Superleague": "Super League - Suisse",
-    # Autriche
     "Austrian Football Bundesliga": "Bundesliga - Autriche",
-    # Turquie
     "Turkey Super League": "Süper Lig - Turquie",
-    # Grèce
     "Super League - Greece": "Super League - Grèce",
-    # Russie
     "Premier League - Russia": "Premier League - Russie",
-    # Scandinavie
     "Eliteserien - Norway": "Eliteserien - Norvège",
     "Allsvenskan - Sweden": "Allsvenskan - Suède",
     "Superettan - Sweden": "Superettan - Suède",
     "Veikkausliiga - Finland": "Veikkausliiga - Finlande",
     "Denmark Superliga": "Superliga - Danemark",
-    # Pologne
     "Ekstraklasa - Poland": "Ekstraklasa - Pologne",
-    # Irlande
     "League of Ireland": "Championnat d'Irlande",
-    # Amérique
     "MLS": "MLS - États-Unis",
     "Liga MX": "Liga MX - Mexique",
     "Brazil Série A": "Brasileirão Série A",
@@ -79,11 +61,9 @@ LEAGUES_FR = {
     "Primera División - Chile": "Primera División - Chili",
     "Copa Libertadores": "Copa Libertadores",
     "Copa Sudamericana": "Copa Sudamericana",
-    # Asie
     "J League": "J-League - Japon",
     "K League 1": "K-League 1 - Corée",
     "A-League": "A-League - Australie",
-    # Compétitions UEFA
     "UEFA Champions League": "🏆 Ligue des Champions UEFA",
     "UEFA Europa League": "🏆 Ligue Europa UEFA",
     "UEFA Europa Conference Leag…": "🏆 Ligue Europa Conference UEFA",
@@ -92,7 +72,6 @@ LEAGUES_FR = {
 }
 
 def translate_league(name):
-    """Traduit un nom de ligue en français si disponible."""
     return LEAGUES_FR.get(name, name)
 
 # ------------------------------------------------------------
@@ -153,7 +132,7 @@ def get_sports():
     return _SPORTS_CACHE
 
 # ------------------------------------------------------------
-# 4. UTILITAIRES (dates et heures)
+# 4. UTILITAIRES (dates, heures, filtres)
 # ------------------------------------------------------------
 def format_date(iso_date):
     if not iso_date:
@@ -175,6 +154,20 @@ def format_datetime(iso_date):
 def generate_progress_bar(value, total=100, length=10):
     filled = int((value / total) * length)
     return "█" * filled + "░" * (length - filled)
+
+def is_match_upcoming(match, tolerance_minutes=20):
+    """Retourne True si le match n'a pas débuté il y a plus de X minutes.
+       tolerance_minutes=20 → masque les matchs commencés il y a plus de 20 minutes."""
+    try:
+        commence = match.get("commence_time", "")
+        if not commence:
+            return True
+        match_dt = datetime.strptime(commence[:19], "%Y-%m-%dT%H:%M:%S")
+        now_utc = datetime.utcnow()
+        deadline = match_dt + timedelta(minutes=tolerance_minutes)
+        return now_utc <= deadline
+    except:
+        return True
 
 # ------------------------------------------------------------
 # 5. TRADUCTIONS INTERFACE
@@ -273,6 +266,9 @@ def get_matches_for_league(sport_key, markets="h2h"):
         return None, "ℹ️ Aucun match pour ce championnat."
     matches = []
     for ev in data:
+        # ✅ FILTRE : ignore les matchs déjà terminés ou commencés il y a plus de 20 min
+        if not is_match_upcoming(ev):
+            continue
         matches.append({
             "id": ev.get("id"),
             "home_team": ev.get("home_team", "?"),
@@ -304,6 +300,49 @@ def get_all_matches(days_ahead=None):
                         all_matches.append(m)
                 except:
                     continue
+    all_matches.sort(key=lambda x: x.get("commence_time", ""))
+    return all_matches
+
+def get_matches_today():
+    """Matchs du jour (calendaire) pas encore terminés."""
+    all_matches = []
+    today = datetime.now().date()
+    sports = get_sports()
+    
+    for nom, cle in sports.items():
+        matches, error = get_matches_for_league(cle, "h2h")
+        if error or not matches:
+            continue
+        for m in matches:
+            try:
+                md = datetime.strptime(m.get("commence_time","")[:10], "%Y-%m-%d").date()
+                if md == today:
+                    m["league_name"] = nom
+                    all_matches.append(m)
+            except:
+                continue
+    all_matches.sort(key=lambda x: x.get("commence_time", ""))
+    return all_matches
+
+def get_matches_week():
+    """Matchs des 7 prochains jours pas encore terminés."""
+    all_matches = []
+    today = datetime.now().date()
+    limit = today + timedelta(days=7)
+    sports = get_sports()
+    
+    for nom, cle in sports.items():
+        matches, error = get_matches_for_league(cle, "h2h")
+        if error or not matches:
+            continue
+        for m in matches:
+            try:
+                md = datetime.strptime(m.get("commence_time","")[:10], "%Y-%m-%d").date()
+                if today <= md <= limit:
+                    m["league_name"] = nom
+                    all_matches.append(m)
+            except:
+                continue
     all_matches.sort(key=lambda x: x.get("commence_time", ""))
     return all_matches
 
@@ -803,9 +842,9 @@ def handle_text(message):
 
     if text == texts["menu_pred_today"]:
         loading = bot.reply_to(message, texts["loading"], parse_mode="Markdown")
-        all_matches = get_all_matches(days_ahead=1)
+        all_matches = get_matches_today()
         if not all_matches:
-            bot.edit_message_text("⚠️ Aucun match aujourd'hui ou demain.", chat_id, loading.message_id)
+            bot.edit_message_text("⚠️ Aucun match aujourd'hui.", chat_id, loading.message_id)
             return
         bot.current_matches_list = all_matches[:50]
         for i, m in enumerate(bot.current_matches_list):
@@ -818,7 +857,7 @@ def handle_text(message):
 
     if text == texts["menu_week"]:
         loading = bot.reply_to(message, texts["loading"], parse_mode="Markdown")
-        all_matches = get_all_matches(days_ahead=7)
+        all_matches = get_matches_week()
         if not all_matches:
             bot.edit_message_text("⚠️ Aucun match dans les 7 prochains jours.", chat_id, loading.message_id)
             return
@@ -924,6 +963,7 @@ if __name__ == "__main__":
     print("✅ Base de données initialisée.")
     sports = get_sports()
     print(f"✅ {len(sports)} championnats chargés (traduits en français).")
+    print("⏱️ Filtre : masque les matchs commencés il y a plus de 20 minutes.")
     threading.Thread(target=run_scheduler, daemon=True).start()
     print("⏰ Notifications programmées (toutes les heures).")
     print("✅ Bot démarré.")
