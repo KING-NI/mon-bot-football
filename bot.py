@@ -12,8 +12,11 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 # ------------------------------------------------------------
 # 1. CONFIGURATION
 # ------------------------------------------------------------
-ODDS_API_KEY = os.getenv("ODDS_API_KEY", "d2c5556ba64eb508457dcd097ecd6664")
-ODDS_URL = "https://api.the-odds-api.com/v4/"
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
+RAPIDAPI_HOST = "therundown-therundown-v1.p.rapidapi.com"
+API_BASE_URL = f"https://{RAPIDAPI_HOST}"
+FOOTBALL_SPORT_ID = 3
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID = os.getenv("CHAT_ID", "")
 
@@ -286,110 +289,7 @@ def t(lang, key, **kwargs):
     return text
 
 # ------------------------------------------------------------
-# 3. TRADUCTION DES LIGUES
-# ------------------------------------------------------------
-LEAGUES_FR = {
-    "EPL": "Premier League - Angleterre",
-    "Premier League": "Premier League - Angleterre",
-    "Championship": "Championnat - Angleterre (D2)",
-    "EFL Cup": "Coupe de la Ligue anglaise",
-    "League 1": "League One - Angleterre (D3)",
-    "League 2": "League Two - Angleterre (D4)",
-    "Ligue 1 - France": "Ligue 1 - France",
-    "Ligue 2 - France": "Ligue 2 - France",
-    "Bundesliga - Germany": "Bundesliga - Allemagne",
-    "Bundesliga 2 - Germany": "Bundesliga 2 - Allemagne",
-    "3. Liga - Germany": "3. Liga - Allemagne",
-    "DFB-Pokal": "Coupe d'Allemagne",
-    "Frauen-Bundesliga": "Bundesliga féminine - Allemagne",
-    "La Liga - Spain": "Liga - Espagne",
-    "La Liga 2 - Spain": "Liga 2 - Espagne",
-    "Serie A - Italy": "Serie A - Italie",
-    "Serie B - Italy": "Serie B - Italie",
-    "Primeira Liga - Portugal": "Liga Portugal",
-    "Dutch Eredivisie": "Eredivisie - Pays-Bas",
-    "Belgium First Div": "Pro League - Belgique",
-    "Premiership - Scotland": "Premiership - Écosse",
-    "Swiss Superleague": "Super League - Suisse",
-    "Austrian Football Bundesliga": "Bundesliga - Autriche",
-    "Turkey Super League": "Süper Lig - Turquie",
-    "Super League - Greece": "Super League - Grèce",
-    "Premier League - Russia": "Premier League - Russie",
-    "Eliteserien - Norway": "Eliteserien - Norvège",
-    "Allsvenskan - Sweden": "Allsvenskan - Suède",
-    "Superettan - Sweden": "Superettan - Suède",
-    "Veikkausliiga - Finland": "Veikkausliiga - Finlande",
-    "Denmark Superliga": "Superliga - Danemark",
-    "Ekstraklasa - Poland": "Ekstraklasa - Pologne",
-    "League of Ireland": "Championnat d'Irlande",
-    "MLS": "MLS - États-Unis",
-    "Liga MX": "Liga MX - Mexique",
-    "Brazil Série A": "Brasileirão Série A",
-    "Brazil Série B": "Brasileirão Série B",
-    "Primera División - Argentina": "Primera División - Argentine",
-    "Primera División - Chile": "Primera División - Chili",
-    "Copa Libertadores": "Copa Libertadores",
-    "Copa Sudamericana": "Copa Sudamericana",
-    "J League": "J-League - Japon",
-    "K League 1": "K-League 1 - Corée",
-    "A-League": "A-League - Australie",
-    "UEFA Champions League": "🏆 Ligue des Champions UEFA",
-    "UEFA Europa League": "🏆 Ligue Europa UEFA",
-    "UEFA Europa Conference Leag…": "🏆 Ligue Europa Conference UEFA",
-    "UEFA Europa Conference League": "🏆 Ligue Europa Conference UEFA",
-    "UEFA Nations League": "🇪🇺 Ligue des Nations UEFA",
-}
-
-def translate_league(name):
-    return LEAGUES_FR.get(name, name)
-
-# ------------------------------------------------------------
-# 4. CHAMPIONNATS
-# ------------------------------------------------------------
-_SPORTS_CACHE = None
-_SPORTS_CACHE_TIME = None
-
-SPORTS_FALLBACK = {
-    "⚽ Premier League - Angleterre": "soccer_epl",
-    "⚽ Ligue 1 - France": "soccer_france_ligue_one",
-    "⚽ Bundesliga - Allemagne": "soccer_germany_bundesliga",
-    "⚽ Liga - Espagne": "soccer_spain_la_liga",
-    "⚽ Serie A - Italie": "soccer_italy_serie_a",
-    "⚽ MLS - États-Unis": "soccer_usa_mls",
-    "🏆 Ligue des Champions UEFA": "soccer_uefa_champs_league",
-    "🇪🇺 Ligue des Nations UEFA": "soccer_uefa_nations_league",
-}
-
-def get_all_sports(force_refresh=False):
-    global _SPORTS_CACHE, _SPORTS_CACHE_TIME
-    if not force_refresh and _SPORTS_CACHE and _SPORTS_CACHE_TIME:
-        if datetime.now() - _SPORTS_CACHE_TIME < timedelta(hours=6):
-            return _SPORTS_CACHE
-    try:
-        r = requests.get(f"{ODDS_URL}sports/", params={"apiKey": ODDS_API_KEY}, timeout=15)
-        if r.status_code == 200:
-            soccer_leagues = {}
-            for sport in r.json():
-                if sport.get("group") == "Soccer" and sport.get("active"):
-                    title_fr = translate_league(sport["title"])
-                    soccer_leagues[f"⚽ {title_fr}"] = sport["key"]
-            if soccer_leagues:
-                print(f"✅ {len(soccer_leagues)} championnats récupérés")
-                _SPORTS_CACHE = soccer_leagues
-                _SPORTS_CACHE_TIME = datetime.now()
-                return soccer_leagues
-    except Exception as e:
-        print(f"⚠️ Erreur sports: {e}")
-    return SPORTS_FALLBACK
-
-def get_sports():
-    global _SPORTS_CACHE
-    if _SPORTS_CACHE is None:
-        _SPORTS_CACHE = get_all_sports()
-    return _SPORTS_CACHE
-
-# ------------------------------------------------------------
-# 5. UTILITAIRES
+# 3. UTILITAIRES
 # ------------------------------------------------------------
 def format_date(iso_date):
     if not iso_date:
@@ -403,30 +303,33 @@ def format_datetime(iso_date):
     if not iso_date:
         return "?"
     try:
-        dt = datetime.strptime(iso_date[:19], "%Y-%m-%dT%H:%M:%S")
+        dt = datetime.strptime(iso_date[:19].replace("Z", ""), "%Y-%m-%dT%H:%M:%S")
         return dt.strftime("%d/%m/%Y %Hh%M")
     except:
-        return format_date(iso_date)
+        try:
+            dt = datetime.strptime(iso_date[:16], "%Y-%m-%dT%H:%M")
+            return dt.strftime("%d/%m/%Y %Hh%M")
+        except:
+            return format_date(iso_date)
 
 def generate_progress_bar(value, total=100, length=10):
     filled = int((value / total) * length)
     return "█" * filled + "░" * (length - filled)
 
 def is_match_upcoming(match, tolerance_minutes=20):
-    """Garde les matchs qui n'ont pas commencé il y a plus de 20 min."""
     try:
-        commence = match.get("commence_time", "")
+        commence = match.get("event_date", "")
         if not commence:
             return True
-        match_dt = datetime.strptime(commence[:19], "%Y-%m-%dT%H:%M:%S")
+        dt = datetime.strptime(commence[:19].replace("Z", ""), "%Y-%m-%dT%H:%M:%S")
         now_utc = datetime.utcnow()
-        deadline = match_dt + timedelta(minutes=tolerance_minutes)
+        deadline = dt + timedelta(minutes=tolerance_minutes)
         return now_utc <= deadline
     except:
         return True
 
 # ------------------------------------------------------------
-# 6. BASE DE DONNÉES
+# 4. BASE DE DONNÉES
 # ------------------------------------------------------------
 def init_db():
     conn = sqlite3.connect('predictions.db')
@@ -506,209 +409,238 @@ def get_stats(user_id, lang):
     return t(lang, "no_data")
 
 # ------------------------------------------------------------
-# 7. API THE ODDS
+# 5. API THERUNDOWN
 # ------------------------------------------------------------
-def odds_request(endpoint, params=None, retries=2):
+_matches_cache = {}
+_matches_cache_time = {}
+
+def therundown_request(endpoint, params=None, retries=2):
     if params is None:
         params = {}
-    params["apiKey"] = ODDS_API_KEY
-    url = f"{ODDS_URL}{endpoint}"
+    headers = {
+        "X-RapidAPI-Key": RAPIDAPI_KEY,
+        "X-RapidAPI-Host": RAPIDAPI_HOST,
+    }
+    url = f"{API_BASE_URL}{endpoint}"
     for attempt in range(retries):
         try:
-            r = requests.get(url, params=params, timeout=10)
+            r = requests.get(url, headers=headers, params=params, timeout=10)
             if r.status_code == 200:
                 return r.json()
+            print(f"⚠️ Erreur {r.status_code}: {r.text[:200]}")
         except Exception as e:
             print(f"⚠️ {endpoint}: {e}")
         if attempt < retries - 1:
             time.sleep(1)
     return None
 
-def get_matches_for_league(sport_key, markets="h2h,spreads,totals"):
-    data = odds_request(f"sports/{sport_key}/odds/",
-                        {"regions": "eu,us", "markets": markets, "oddsFormat": "decimal"})
+def get_events_for_date(date_str, cache_ttl=600):
+    """Récupère les matchs de football pour une date (YYYY-MM-DD)."""
+    now = time.time()
+    cache_key = f"events_{date_str}"
+    if cache_key in _matches_cache and cache_key in _matches_cache_time:
+        if now - _matches_cache_time[cache_key] < cache_ttl:
+            return _matches_cache[cache_key]
+    
+    data = therundown_request(f"/sports/{FOOTBALL_SPORT_ID}/events/{date_str}")
     if not data:
-        return None, "error"
-    if len(data) == 0:
-        return None, "empty"
+        if cache_key in _matches_cache:
+            return _matches_cache[cache_key]
+        return []
+    
+    events = data.get("events", [])
+    _matches_cache[cache_key] = events
+    _matches_cache_time[cache_key] = now
+    return events
+
+def format_match_from_rundown(ev):
+    """Convertit un événement TheRundown au format interne."""
+    try:
+        teams = ev.get("teams", [])
+        home_team = "?"
+        away_team = "?"
+        for team in teams:
+            if team.get("is_home"):
+                home_team = team.get("name", "?")
+            else:
+                away_team = team.get("name", "?")
+        
+        # Récupérer les cotes (TheRundown fournit souvent des lignes)
+        lines = ev.get("lines", {})
+        bookmakers = []
+        if lines:
+            for market_key, market_data in lines.items():
+                if isinstance(market_data, list):
+                    for line in market_data:
+                        if isinstance(line, dict):
+                            bookmakers.append({
+                                "key": market_key,
+                                "outcomes": line.get("outcomes", [])
+                            })
+        
+        return {
+            "id": ev.get("event_id"),
+            "home_team": home_team,
+            "away_team": away_team,
+            "league_name": ev.get("sport_name", "Football"),
+            "commence_time": ev.get("event_date", ""),
+            "bookmakers": bookmakers,
+            "raw": ev  # On garde les données brutes
+        }
+    except Exception as e:
+        print(f"⚠️ Erreur format: {e}")
+        return None
+
+def get_matches_today():
+    today = datetime.now().strftime("%Y-%m-%d")
+    events = get_events_for_date(today)
     matches = []
-    for ev in data:
+    for ev in events:
         if not is_match_upcoming(ev):
             continue
-        matches.append({
-            "id": ev.get("id"),
-            "home_team": ev.get("home_team", "?"),
-            "away_team": ev.get("away_team", "?"),
-            "league_name": sport_key,
-            "commence_time": ev.get("commence_time", ""),
-            "bookmakers": ev.get("bookmakers", [])
-        })
+        m = format_match_from_rundown(ev)
+        if m:
+            matches.append(m)
     matches.sort(key=lambda x: x.get("commence_time", ""))
-    return matches, None
+    return matches
 
-# ---------- NOUVEAU : requêtes parallèles ----------
-def get_matches_for_multiple_leagues(sports_dict, max_workers=10):
-    """Interroge plusieurs championnats EN PARALLÈLE pour aller plus vite."""
+def get_matches_week():
     all_matches = []
-    
-    def fetch(item):
-        nom, cle = item
-        try:
-            matches, error = get_matches_for_league(cle)
-            if error or not matches:
-                return []
-            for m in matches:
-                m["league_name"] = nom
-            return matches
-        except:
-            return []
-    
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(fetch, item) for item in sports_dict.items()]
-        for future in as_completed(futures):
-            try:
-                result = future.result(timeout=20)
-                all_matches.extend(result)
-            except:
+    for i in range(8):
+        date_str = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
+        events = get_events_for_date(date_str)
+        for ev in events:
+            if not is_match_upcoming(ev):
                 continue
-    
+            m = format_match_from_rundown(ev)
+            if m:
+                all_matches.append(m)
     all_matches.sort(key=lambda x: x.get("commence_time", ""))
     return all_matches
 
-def get_matches_today():
-    today = datetime.now().date()
-    all_matches = get_matches_for_multiple_leagues(get_sports())
-    filtered = []
-    for m in all_matches:
-        try:
-            md = datetime.strptime(m.get("commence_time","")[:10], "%Y-%m-%d").date()
-            if md == today:
-                filtered.append(m)
-        except:
-            continue
-    return filtered
-
-def get_matches_week():
-    today = datetime.now().date()
-    limit = today + timedelta(days=7)
-    all_matches = get_matches_for_multiple_leagues(get_sports())
-    filtered = []
-    for m in all_matches:
-        try:
-            md = datetime.strptime(m.get("commence_time","")[:10], "%Y-%m-%d").date()
-            if today <= md <= limit:
-                filtered.append(m)
-        except:
-            continue
-    return filtered
-
 def get_all_matches(days_ahead=None):
-    all_matches = get_matches_for_multiple_leagues(get_sports())
     if days_ahead is None:
-        return all_matches
-    today = datetime.now().date()
-    filtered = []
-    for m in all_matches:
-        try:
-            md = datetime.strptime(m.get("commence_time","")[:10], "%Y-%m-%d").date()
-            if today <= md <= today + timedelta(days=days_ahead):
-                filtered.append(m)
-        except:
-            continue
-    return filtered
+        return get_matches_week()
+    all_matches = []
+    for i in range(days_ahead + 1):
+        date_str = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
+        events = get_events_for_date(date_str)
+        for ev in events:
+            if not is_match_upcoming(ev):
+                continue
+            m = format_match_from_rundown(ev)
+            if m:
+                all_matches.append(m)
+    all_matches.sort(key=lambda x: x.get("commence_time", ""))
+    return all_matches
 
 # ------------------------------------------------------------
-# 8. MARCHÉS
+# 6. MARCHÉS (basé sur les données brutes TheRundown)
 # ------------------------------------------------------------
 def get_available_markets(match):
+    """Détecte les marchés disponibles."""
     markets = set()
-    for bm in match.get('bookmakers', []):
-        for market in bm.get('markets', []):
-            key = market.get('key')
-            if key:
-                markets.add(key)
+    raw = match.get("raw", {})
+    lines = raw.get("lines", {})
+    for key in lines.keys():
+        if "moneyline" in key.lower() or "1x2" in key.lower():
+            markets.add("h2h")
+        elif "spread" in key.lower():
+            markets.add("spreads")
+        elif "total" in key.lower():
+            markets.add("totals")
+    if not markets:
+        markets = {"h2h"}  # Par défaut, on suppose 1X2
     return list(markets)
 
 def get_market_predictions(match, market_type="h2h"):
+    """Extrait les probabilités depuis les cotes TheRundown."""
     try:
-        home = match["home_team"]
-        away = match["away_team"]
-        for bm in match.get('bookmakers', []):
-            for market in bm.get('markets', []):
-                if market.get('key') != market_type:
-                    continue
-                outcomes = market.get('outcomes', [])
-                
-                if market_type == "h2h":
-                    oh = next((o["price"] for o in outcomes if o["name"] == home), None)
-                    od = next((o["price"] for o in outcomes if o["name"] == "Draw"), None)
-                    oa = next((o["price"] for o in outcomes if o["name"] == away), None)
-                    if None in (oh, od, oa):
-                        continue
-                    ph = (1/oh)*100; pd = (1/od)*100; pa = (1/oa)*100
-                    total = ph + pd + pa
-                    ph = (ph/total)*100; pd = (pd/total)*100; pa = (pa/total)*100
-                    if ph > pa and ph > pd:
-                        pred = f"🏠 {home}"
-                    elif pa > ph and pa > pd:
-                        pred = f"✈️ {away}"
-                    else:
-                        pred = "🤝 Nul"
-                    return {"type": "1X2", "prob_home": ph, "prob_draw": pd, "prob_away": pa,
-                            "prediction": pred,
-                            "display": f"🏠 {home} : {ph:.1f}% {generate_progress_bar(ph)}\n🤝 Nul : {pd:.1f}% {generate_progress_bar(pd)}\n✈️ {away} : {pa:.1f}% {generate_progress_bar(pa)}"}
-                
-                elif market_type == "spreads":
-                    lines = []
-                    for o in outcomes:
-                        if o.get('price', 0) > 0:
-                            lines.append({"name": o["name"], "point": o.get("point", ""), "price": o["price"],
-                                          "prob": (1/o["price"])*100})
-                    if not lines:
-                        continue
-                    best = max(lines, key=lambda x: x["prob"])
-                    pred = f"{best['name']} ({best['point']})"
-                    return {"type": "Handicap", "prediction": pred,
-                            "display": "\n".join([f"{l['name']} {l['point']} : {l['prob']:.1f}% {generate_progress_bar(l['prob'])}" for l in lines])}
-                
-                elif market_type == "totals":
-                    lines = []
-                    for o in outcomes:
-                        if o.get('price', 0) > 0 and o.get('point'):
-                            lines.append({"name": o["name"], "point": o["point"], "price": o["price"],
-                                          "prob": (1/o["price"])*100})
-                    if not lines:
-                        continue
-                    best = max(lines, key=lambda x: x["prob"])
-                    pred = f"{best['name']} {best['point']}"
-                    return {"type": "Over/Under", "prediction": pred,
-                            "display": "\n".join([f"{l['name']} {l['point']} : {l['prob']:.1f}% {generate_progress_bar(l['prob'])}" for l in lines])}
+        raw = match.get("raw", {})
+        lines = raw.get("lines", {})
+        
+        # Chercher les cotes 1X2
+        target_keys = []
+        if market_type == "h2h":
+            target_keys = ["moneyline", "1x2", "h2h"]
+        elif market_type == "spreads":
+            target_keys = ["spread", "pointspread"]
+        elif market_type == "totals":
+            target_keys = ["total", "overunder"]
+        
+        for key, market_data in lines.items():
+            if any(tk in key.lower() for tk in target_keys):
+                if isinstance(market_data, list) and market_data:
+                    for line in market_data:
+                        if not isinstance(line, dict):
+                            continue
+                        outcomes = line.get("outcomes", [])
+                        if not outcomes:
+                            continue
+                        
+                        # Extraire les prix
+                        prices = []
+                        for o in outcomes:
+                            price = o.get("price", 0)
+                            if price and price > 0:
+                                prices.append({"name": o.get("name", "?"), "price": price, "prob": (1/price)*100})
+                        
+                        if market_type == "h2h" and len(prices) >= 3:
+                            home = match["home_team"]
+                            away = match["away_team"]
+                            ph = next((p["prob"] for p in prices if home.lower() in p["name"].lower()), 0)
+                            pd = next((p["prob"] for p in prices if "draw" in p["name"].lower() or "nul" in p["name"].lower()), 0)
+                            pa = next((p["prob"] for p in prices if away.lower() in p["name"].lower()), 0)
+                            total = ph + pd + pa
+                            if total > 0:
+                                ph = (ph/total)*100; pd = (pd/total)*100; pa = (pa/total)*100
+                                if ph > pa and ph > pd:
+                                    pred = f"🏠 {home}"
+                                elif pa > ph and pa > pd:
+                                    pred = f"✈️ {away}"
+                                else:
+                                    pred = "🤝 Nul"
+                                return {"type": "1X2", "prob_home": ph, "prob_draw": pd, "prob_away": pa,
+                                        "prediction": pred,
+                                        "display": f"🏠 {home} : {ph:.1f}% {generate_progress_bar(ph)}\n🤝 Nul : {pd:.1f}% {generate_progress_bar(pd)}\n✈️ {away} : {pa:.1f}% {generate_progress_bar(pa)}"}
+                        elif market_type in ("spreads", "totals") and len(prices) >= 2:
+                            best = max(prices, key=lambda x: x["prob"])
+                            point = outcomes[0].get("point", "") if outcomes else ""
+                            pred = f"{best['name']} {point}"
+                            return {"type": "Handicap" if market_type == "spreads" else "Over/Under",
+                                    "prediction": pred,
+                                    "display": "\n".join([f"{p['name']} {point} : {p['prob']:.1f}% {generate_progress_bar(p['prob'])}" for p in prices])}
+        
         return {"error": "not_available"}
     except Exception as e:
         return {"error": str(e)}
 
 def get_best_odds(match):
     best = {"home": (0, ""), "draw": (0, ""), "away": (0, "")}
-    for bm in match.get('bookmakers', []):
-        name = bm.get('title', bm.get('key', '?'))
-        for market in bm.get('markets', []):
-            if market.get('key') != 'h2h':
-                continue
-            for o in market.get('outcomes', []):
-                if o['name'] == match['home_team'] and o['price'] > best['home'][0]:
-                    best['home'] = (o['price'], name)
-                elif o['name'] == 'Draw' and o['price'] > best['draw'][0]:
-                    best['draw'] = (o['price'], name)
-                elif o['name'] == match['away_team'] and o['price'] > best['away'][0]:
-                    best['away'] = (o['price'], name)
+    raw = match.get("raw", {})
+    lines = raw.get("lines", {})
+    for key, market_data in lines.items():
+        if "moneyline" in key.lower() or "1x2" in key.lower():
+            if isinstance(market_data, list):
+                for line in market_data:
+                    if isinstance(line, dict):
+                        for o in line.get("outcomes", []):
+                            name = o.get("name", "")
+                            price = o.get("price", 0)
+                            if match["home_team"].lower() in name.lower() and price > best['home'][0]:
+                                best['home'] = (price, key)
+                            elif "draw" in name.lower() and price > best['draw'][0]:
+                                best['draw'] = (price, key)
+                            elif match["away_team"].lower() in name.lower() and price > best['away'][0]:
+                                best['away'] = (price, key)
     return best
 
 def format_best_odds(match, lang):
     best = get_best_odds(match)
     texte = f"{t(lang, 'best_odds')}\n\n"
-    texte += f"🏠 {match['home_team']} : *{best['home'][0]}* ({best['home'][1]})\n"
-    texte += f"🤝 Nul : *{best['draw'][0]}* ({best['draw'][1]})\n"
-    texte += f"✈️ {match['away_team']} : *{best['away'][0]}* ({best['away'][1]})\n"
+    texte += f"🏠 {match['home_team']} : *{best['home'][0]}*\n"
+    texte += f"🤝 Nul : *{best['draw'][0]}*\n"
+    texte += f"✈️ {match['away_team']} : *{best['away'][0]}*\n"
     return texte
 
 def analyze_value(match, lang):
@@ -728,18 +660,16 @@ def analyze_value(match, lang):
     return texte
 
 # ------------------------------------------------------------
-# 9. MENUS
+# 7. MENUS
 # ------------------------------------------------------------
 def menu_options(lang):
     markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     markup.add(
         KeyboardButton(t(lang, "menu_pred_today")),
         KeyboardButton(t(lang, "menu_week")),
-        KeyboardButton(t(lang, "menu_by_league")),
         KeyboardButton(t(lang, "menu_search")),
         KeyboardButton(t(lang, "menu_stats")),
         KeyboardButton(t(lang, "menu_follow")),
-        KeyboardButton(t(lang, "menu_backtest")),
         KeyboardButton(t(lang, "menu_trends")),
         KeyboardButton(t(lang, "menu_lang")),
         KeyboardButton(t(lang, "menu_help")),
@@ -751,27 +681,6 @@ def menu_lang_inline():
     markup = InlineKeyboardMarkup(row_width=1)
     for code, name in LANG_FLAGS.items():
         markup.add(InlineKeyboardButton(name, callback_data=f"setlang_{code}"))
-    return markup
-
-def menu_ligues_inline(lang, page=0):
-    markup = InlineKeyboardMarkup(row_width=2)
-    sports = get_sports()
-    items = list(sports.items())
-    per_page = 20
-    start = page * per_page
-    end = start + per_page
-    for nom, cle in items[start:end]:
-        display = nom if len(nom) <= 30 else nom[:29] + "…"
-        markup.add(InlineKeyboardButton(display, callback_data=f"league_{cle}"))
-    nav = []
-    if page > 0:
-        nav.append(InlineKeyboardButton(t(lang, "prev_short"), callback_data=f"lgpage_{page-1}"))
-    if end < len(items):
-        nav.append(InlineKeyboardButton(t(lang, "next_short"), callback_data=f"lgpage_{page+1}"))
-    if nav:
-        markup.add(*nav)
-    markup.add(InlineKeyboardButton(t(lang, "total_leagues", count=len(sports)), callback_data="noop"))
-    markup.add(InlineKeyboardButton(t(lang, "back"), callback_data="menu_back"))
     return markup
 
 def menu_matchs_list(matches, prefix="match_day", lang="fr", page=0):
@@ -794,34 +703,23 @@ def menu_matchs_list(matches, prefix="match_day", lang="fr", page=0):
     markup.add(InlineKeyboardButton(t(lang, "back"), callback_data="menu_back"))
     return markup
 
-def menu_matchs_inline_list(sport_key, matches, lang="fr"):
-    markup = InlineKeyboardMarkup(row_width=1)
-    for i, m in enumerate(matches[:10]):
-        dt = format_datetime(m.get("commence_time", ""))
-        markup.add(InlineKeyboardButton(f"📅 {dt}\n⚽ {m['home_team']} vs {m['away_team']}",
-                                         callback_data=f"match_league_{sport_key}_{i}"))
-    markup.add(InlineKeyboardButton(t(lang, "back"), callback_data="choose_league"))
-    return markup
-
 def menu_match_actions(match_id, lang="fr", available_markets=None):
     markup = InlineKeyboardMarkup(row_width=1)
     if available_markets is None:
         available_markets = ["h2h"]
-    
     if "h2h" in available_markets:
         markup.add(InlineKeyboardButton(t(lang, "market_h2h"), callback_data=f"market_{match_id}_h2h"))
     if "spreads" in available_markets:
         markup.add(InlineKeyboardButton(t(lang, "market_spreads"), callback_data=f"market_{match_id}_spreads"))
     if "totals" in available_markets:
         markup.add(InlineKeyboardButton(t(lang, "market_totals"), callback_data=f"market_{match_id}_totals"))
-    
     markup.add(InlineKeyboardButton(t(lang, "best_odds"), callback_data=f"bestodds_{match_id}"))
     markup.add(InlineKeyboardButton(t(lang, "value_analysis"), callback_data=f"value_{match_id}"))
     markup.add(InlineKeyboardButton(t(lang, "back"), callback_data="back_to_matches"))
     return markup
 
 # ------------------------------------------------------------
-# 10. BOT TELEGRAM
+# 8. BOT TELEGRAM
 # ------------------------------------------------------------
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 bot.match_cache = {}
@@ -852,15 +750,6 @@ def handle_start(message):
         bot.current_match_data = {}
         send_welcome(message, lang)
 
-@bot.message_handler(commands=['refresh'])
-def handle_refresh(message):
-    global _SPORTS_CACHE, _SPORTS_CACHE_TIME
-    _SPORTS_CACHE = None
-    _SPORTS_CACHE_TIME = None
-    lang = get_user_lang(message.from_user.id) or "fr"
-    new_sports = get_sports()
-    bot.reply_to(message, f"✅ {len(new_sports)} championnats rechargés.")
-
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callback(call):
     try:
@@ -879,22 +768,9 @@ def handle_callback(call):
                              parse_mode="Markdown", reply_markup=menu_options(lang))
             return
 
-        if call.data == "noop":
-            return
-
         if call.data == "menu_back":
             bot.send_message(chat_id, f"{t(lang, 'welcome')}\n\n👇",
                              parse_mode="Markdown", reply_markup=menu_options(lang))
-            return
-
-        if call.data == "choose_league":
-            bot.send_message(chat_id, t(lang, "choose_league"),
-                             parse_mode="Markdown", reply_markup=menu_ligues_inline(lang, 0))
-            return
-
-        if call.data.startswith("lgpage_"):
-            page = int(call.data.replace("lgpage_", ""))
-            bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=menu_ligues_inline(lang, page))
             return
 
         if call.data == "back_to_matches":
@@ -903,27 +779,7 @@ def handle_callback(call):
                                  parse_mode="Markdown",
                                  reply_markup=menu_matchs_list(bot.current_matches_list, "match_day", lang))
             else:
-                bot.send_message(chat_id, t(lang, "back"), parse_mode="Markdown", reply_markup=menu_ligues_inline(lang))
-            return
-
-        if call.data.startswith("league_"):
-            sport_key = call.data.replace("league_", "")
-            loading = bot.send_message(chat_id, t(lang, "loading"), parse_mode="Markdown")
-            matches, error = get_matches_for_league(sport_key)
-            if error == "empty":
-                bot.edit_message_text(t(lang, "no_league_matches"), chat_id, loading.message_id)
-                return
-            if error or not matches:
-                bot.edit_message_text(t(lang, "no_matches"), chat_id, loading.message_id)
-                return
-            sports = get_sports()
-            nom_ligue = next((k for k, v in sports.items() if v == sport_key), sport_key)
-            for i, m in enumerate(matches[:10]):
-                m["league_name"] = nom_ligue
-                bot.match_cache[f"match_league_{sport_key}_{i}"] = m
-            bot.delete_message(chat_id, loading.message_id)
-            bot.send_message(chat_id, t(lang, "choose_match"), parse_mode="Markdown",
-                             reply_markup=menu_matchs_inline_list(sport_key, matches, lang))
+                bot.send_message(chat_id, t(lang, "back"), parse_mode="Markdown", reply_markup=menu_options(lang))
             return
 
         if call.data.startswith("page_"):
@@ -936,7 +792,7 @@ def handle_callback(call):
                                  reply_markup=menu_matchs_list(bot.current_matches_list, prefix, lang, page))
             return
 
-        if call.data.startswith("match_day_") or call.data.startswith("match_league_"):
+        if call.data.startswith("match_day_"):
             match = bot.match_cache.get(call.data)
             if not match:
                 bot.send_message(chat_id, "❌ Match introuvable.")
@@ -1079,12 +935,6 @@ def handle_text(message):
                          reply_markup=menu_matchs_list(bot.current_matches_list, "match_day", lang, 0))
         return
 
-    if text == t(lang, "menu_by_league"):
-        sports = get_sports()
-        bot.reply_to(message, f"🏆 *{len(sports)}*\n\n{t(lang, 'choose_league')}",
-                     parse_mode="Markdown", reply_markup=menu_ligues_inline(lang, 0))
-        return
-
     if text == t(lang, "menu_search"):
         bot.reply_to(message, t(lang, "search_prompt"),
                      parse_mode="Markdown", reply_markup=menu_options(lang))
@@ -1129,7 +979,7 @@ def handle_text(message):
     # Recherche libre
     loading = bot.reply_to(message, t(lang, "loading"), parse_mode="Markdown")
     try:
-        matches = get_all_matches(days_ahead=None)
+        matches = get_all_matches(days_ahead=7)
     except:
         matches = []
     found = [m for m in matches if text.lower() in m['home_team'].lower() or text.lower() in m['away_team'].lower()]
@@ -1150,7 +1000,7 @@ def handle_text(message):
     bot.edit_message_text(texte, chat_id, loading.message_id, parse_mode="Markdown", reply_markup=menu_options(lang))
 
 # ------------------------------------------------------------
-# 11. SERVEUR HTTP POUR RENDER
+# 9. SERVEUR HTTP POUR RENDER
 # ------------------------------------------------------------
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -1166,14 +1016,11 @@ def run_http():
 threading.Thread(target=run_http, daemon=True).start()
 
 # ------------------------------------------------------------
-# 12. LANCEMENT
+# 10. LANCEMENT
 # ------------------------------------------------------------
 if __name__ == "__main__":
     init_db()
     print("✅ Base de données initialisée.")
-    sports = get_sports()
-    print(f"✅ {len(sports)} championnats chargés.")
-    print("⏱️ Filtre : masque les matchs commencés il y a plus de 20 minutes.")
-    print("⚡ Parallélisation : 10 requêtes simultanées")
+    print(f"⚽ TheRundown API configurée (sport_id={FOOTBALL_SPORT_ID})")
     print("✅ Bot démarré.")
     bot.infinity_polling()
