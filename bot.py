@@ -13,6 +13,7 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "")
 API_BASE_URL = "https://v3.football.api-sports.io"
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+TIMEZONE_OFFSET_HOURS = 1
 
 # ------------------------------------------------------------
 # 2. CHAMPIONNATS POPULAIRES
@@ -38,7 +39,7 @@ POPULAR_LEAGUES = {
 }
 
 # ------------------------------------------------------------
-# 3. TRADUCTION DES TERMES API
+# 3. TRADUCTION COMPLÈTE DES TERMES API
 # ------------------------------------------------------------
 API_TERMS = {
     "fr": {
@@ -102,66 +103,94 @@ def at(lang, key):
     return API_TERMS.get(lang, API_TERMS["fr"]).get(key, key)
 
 def translate_advice(advice, lang):
-    """Traduit les conseils API-Football en langue cible."""
+    """Traduit COMPLÈTEMENT les conseils API-Football."""
     if not advice:
         return advice
-    # 1. D'abord les expressions complètes (avant les mots isolés)
-    full_phrases = {
-        "fr": {
-            "Win or draw": "Victoire ou Nul",
-            "Combo Double chance": "Combo Double chance",
-            "Double chance": "Double chance",
-            "Winner:": "Vainqueur :",
-        },
-        "es": {
-            "Win or draw": "Victoria o Empate",
-            "Combo Double chance": "Combo Doble oportunidad",
-            "Double chance": "Doble oportunidad",
-            "Winner:": "Ganador:",
-        },
-        "pt": {
-            "Win or draw": "Vitória ou Empate",
-            "Combo Double chance": "Combo Dupla chance",
-            "Double chance": "Dupla chance",
-            "Winner:": "Vencedor:",
-        },
-        "ar": {
-            "Win or draw": "فوز أو تعادل",
-            "Combo Double chance": "فرصة مزدوجة مركبة",
-            "Double chance": "فرصة مزدوجة",
-            "Winner:": "الفائز:",
-        },
-        "en": {},
+    if lang == "en":
+        return advice
+    
+    # Traductions complètes des phrases
+    replacements = {
+        "fr": [
+            ("Combo Double chance", "Combo Double opportunité"),
+            ("Double chance", "Double opportunité"),
+            ("Win or draw", "Victoire ou Nul"),
+            ("Winner:", "Vainqueur :"),
+            ("Winner :", "Vainqueur :"),
+            (" and ", " et "),
+            (" or ", " ou "),
+            ("goals", "buts"),
+            ("goal", "but"),
+            ("draw", "nul"),
+            ("win", "victoire"),
+            ("loss", "défaite"),
+            ("home", "domicile"),
+            ("away", "extérieur"),
+            ("Both teams to score", "Les deux équipes marquent"),
+            ("BTTS", "Les deux marquent"),
+        ],
+        "es": [
+            ("Combo Double chance", "Combo Doble oportunidad"),
+            ("Double chance", "Doble oportunidad"),
+            ("Win or draw", "Victoria o Empate"),
+            ("Winner:", "Ganador:"),
+            ("Winner :", "Ganador:"),
+            (" and ", " y "),
+            (" or ", " o "),
+            ("goals", "goles"),
+            ("goal", "gol"),
+            ("draw", "empate"),
+            ("win", "victoria"),
+            ("loss", "derrota"),
+            ("home", "local"),
+            ("away", "visitante"),
+            ("Both teams to score", "Ambos equipos marcan"),
+            ("BTTS", "Ambos marcan"),
+        ],
+        "pt": [
+            ("Combo Double chance", "Combo Dupla oportunidade"),
+            ("Double chance", "Dupla oportunidade"),
+            ("Win or draw", "Vitória ou Empate"),
+            ("Winner:", "Vencedor:"),
+            ("Winner :", "Vencedor:"),
+            (" and ", " e "),
+            (" or ", " ou "),
+            ("goals", "golos"),
+            ("goal", "golo"),
+            ("draw", "empate"),
+            ("win", "vitória"),
+            ("loss", "derrota"),
+            ("home", "casa"),
+            ("away", "fora"),
+            ("Both teams to score", "Ambas equipas marcam"),
+            ("BTTS", "Ambas marcam"),
+        ],
+        "ar": [
+            ("Combo Double chance", "فرصة مزدوجة مركبة"),
+            ("Double chance", "فرصة مزدوجة"),
+            ("Win or draw", "فوز أو تعادل"),
+            ("Winner:", "الفائز:"),
+            ("Winner :", "الفائز:"),
+            (" and ", " و "),
+            (" or ", " أو "),
+            ("goals", "أهداف"),
+            ("goal", "هدف"),
+            ("draw", "تعادل"),
+            ("win", "فوز"),
+            ("loss", "خسارة"),
+            ("home", "المنزل"),
+            ("away", "الخارج"),
+            ("Both teams to score", "كلا الفريقين يسجلان"),
+            ("BTTS", "كلا الفريقين يسجلان"),
+        ],
     }
-    # 2. Puis les mots isolés
-    single_words = {
-        "fr": {
-            " and ": " et ", "goals": "buts", "goal": "but",
-            "draw": "nul", " or ": " ou ",
-        },
-        "es": {
-            " and ": " y ", "goals": "goles", "goal": "gol",
-            "draw": "empate", " or ": " o ",
-        },
-        "pt": {
-            " and ": " e ", "goals": "golos", "goal": "golo",
-            "draw": "empate", " or ": " ou ",
-        },
-        "ar": {
-            " and ": " و ", "goals": "أهداف", "goal": "هدف",
-            "draw": "تعادل", " or ": " أو ",
-        },
-        "en": {},
-    }
+    
     result = advice
-    for en_term, translated in full_phrases.get(lang, {}).items():
-        result = result.replace(en_term, translated)
-    for en_term, translated in single_words.get(lang, {}).items():
+    for en_term, translated in replacements.get(lang, []):
         result = result.replace(en_term, translated)
     return result
 
 def is_valid_uo(value):
-    """Vérifie si la valeur Under/Over est valide (positive)."""
     if not value or value == "N/A":
         return False
     try:
@@ -317,8 +346,9 @@ def format_datetime(iso_date):
     if not iso_date:
         return "?"
     try:
-        dt = datetime.strptime(iso_date[:19], "%Y-%m-%dT%H:%M:%S")
-        return dt.strftime("%d/%m/%Y %Hh%M")
+        dt_utc = datetime.strptime(iso_date[:19], "%Y-%m-%dT%H:%M:%S")
+        dt_local = dt_utc + timedelta(hours=TIMEZONE_OFFSET_HOURS)
+        return dt_local.strftime("%d/%m/%Y %Hh%M")
     except:
         return iso_date[:10] if len(iso_date) >= 10 else "?"
 
@@ -335,9 +365,9 @@ def is_match_upcoming(match, tolerance_minutes=20):
         date_str = match.get("fixture", {}).get("date", "")
         if not date_str:
             return True
-        dt = datetime.strptime(date_str[:19], "%Y-%m-%dT%H:%M:%S")
+        dt_utc = datetime.strptime(date_str[:19], "%Y-%m-%dT%H:%M:%S")
         now_utc = datetime.utcnow()
-        return now_utc <= dt + timedelta(minutes=tolerance_minutes)
+        return now_utc <= dt_utc + timedelta(minutes=tolerance_minutes)
     except:
         return True
 
@@ -1030,6 +1060,6 @@ threading.Thread(target=run_http, daemon=True).start()
 if __name__ == "__main__":
     init_db()
     print("✅ Base de données initialisée.")
-    print("⚽ API-Football - Traduction complète + filtre U/O négatif")
+    print(f"⚽ API-Football - Traduction complète")
     print("✅ Bot démarré.")
     bot.infinity_polling()
