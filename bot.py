@@ -17,45 +17,88 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID = os.getenv("CHAT_ID", "")
 
 # ------------------------------------------------------------
-# 2. CHAMPIONNATS AVEC DRAPEAUX
+# 2. CHAMPIONNATS (récupération dynamique depuis The Odds API)
 # ------------------------------------------------------------
-SPORTS = {
+_SPORTS_CACHE = None
+_SPORTS_CACHE_TIME = None
+
+SPORTS_FALLBACK = {
     "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": "soccer_epl",
     "🇫🇷 Ligue 1": "soccer_france_ligue_one",
     "🇩🇪 Bundesliga": "soccer_germany_bundesliga",
     "🇪🇸 La Liga": "soccer_spain_la_liga",
     "🇮🇹 Serie A": "soccer_italy_serie_a",
-    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": "soccer_efl_champ",
-    "🇳🇱 Eredivisie": "soccer_netherlands_eredivisie",
-    "🇵🇹 Primeira Liga": "soccer_portugal_primeira_liga",
-    "🇧🇪 Pro League": "soccer_belgium_first_div",
-    "🇹🇷 Süper Lig": "soccer_turkey_super_league",
     "🇺🇸 MLS": "soccer_usa_mls",
-    "🇧🇷 Brasil Serie A": "soccer_brazil_campeonato",
-    "🇲🇽 Liga MX": "soccer_mexico_ligamx",
-    "🇯🇵 J-League": "soccer_japan_j_league",
-    "🇰🇷 K-League": "soccer_korea_kleague1",
-    "🇦🇺 A-League": "soccer_australia_aleague",
     "🏆 Champions League": "soccer_uefa_champs_league",
-    "🏆 Europa League": "soccer_uefa_europa_league",
-    "🌍 Coupe du Monde": "soccer_fifa_world_cup",
 }
 
+def get_all_sports(force_refresh=False):
+    global _SPORTS_CACHE, _SPORTS_CACHE_TIME
+    
+    if not force_refresh and _SPORTS_CACHE and _SPORTS_CACHE_TIME:
+        if datetime.now() - _SPORTS_CACHE_TIME < timedelta(hours=6):
+            return _SPORTS_CACHE
+    
+    try:
+        url = f"{ODDS_URL}sports/"
+        params = {"apiKey": ODDS_API_KEY}
+        r = requests.get(url, params=params, timeout=15)
+        
+        if r.status_code == 200:
+            all_sports = r.json()
+            soccer_leagues = {}
+            
+            for sport in all_sports:
+                if sport.get("group") == "Soccer" and sport.get("active"):
+                    key = sport["key"]
+                    title = sport["title"]
+                    display_name = f"⚽ {title}"
+                    soccer_leagues[display_name] = key
+            
+            if soccer_leagues:
+                print(f"✅ {len(soccer_leagues)} championnats récupérés depuis The Odds API")
+                _SPORTS_CACHE = soccer_leagues
+                _SPORTS_CACHE_TIME = datetime.now()
+                return soccer_leagues
+    except Exception as e:
+        print(f"⚠️ Erreur récupération championnats: {e}")
+    
+    return SPORTS_FALLBACK
+
+def get_sports():
+    global _SPORTS_CACHE
+    if _SPORTS_CACHE is None:
+        _SPORTS_CACHE = get_all_sports()
+    return _SPORTS_CACHE
+
 # ------------------------------------------------------------
-# 3. UTILITAIRE DE DATE
+# 3. UTILITAIRES (dates et heures)
 # ------------------------------------------------------------
 def format_date(iso_date):
-    """Convertit 2026-10-10T15:00:00Z en 10/10/2026."""
+    """Convertit 2026-10-10T15:30:00Z en 10/10/2026."""
     if not iso_date:
         return "?"
     try:
-        date_part = iso_date[:10]
-        return datetime.strptime(date_part, "%Y-%m-%d").strftime("%d/%m/%Y")
+        return datetime.strptime(iso_date[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
     except:
         return iso_date[:10] if len(iso_date) >= 10 else "?"
 
+def format_datetime(iso_date):
+    """Convertit 2026-10-10T15:30:00Z en 10/10/2026 à 15h30."""
+    if not iso_date:
+        return "?"
+    try:
+        dt = datetime.strptime(iso_date[:19], "%Y-%m-%dT%H:%M:%S")
+        return dt.strftime("%d/%m/%Y à %Hh%M")
+    except:
+        return format_date(iso_date)
+
+def generate_progress_bar(value, total=100, length=10):
+    filled = int((value / total) * length)
+    return "█" * filled + "░" * (length - filled)
+
 # ------------------------------------------------------------
-# 4. MULTILINGUE
+# 4. TRADUCTIONS
 # ------------------------------------------------------------
 LANGUAGES = {
     "fr": {
@@ -65,7 +108,7 @@ LANGUAGES = {
         "menu_week": "📅 Pronostics de la semaine",
         "menu_search": "⚽ Rechercher une équipe",
         "menu_stats": "📊 Statistiques",
-        "menu_live": "📡 En direct",
+        "menu_standings": "🥇 Classements",
         "menu_follow": "🔔 Suivre une équipe",
         "menu_backtest": "📈 Backtesting",
         "menu_trends": "📊 Mes tendances",
@@ -84,7 +127,7 @@ LANGUAGES = {
         "menu_week": "📅 Week's predictions",
         "menu_search": "⚽ Search team",
         "menu_stats": "📊 Statistics",
-        "menu_live": "📡 Live",
+        "menu_standings": "🥇 Standings",
         "menu_follow": "🔔 Follow a team",
         "menu_backtest": "📈 Backtesting",
         "menu_trends": "📊 My trends",
@@ -95,35 +138,13 @@ LANGUAGES = {
         "back": "🔙 Back",
         "choose_league": "🏆 *Choose a league :*",
         "choose_match": "⚽ *Choose a match :*",
-    },
-    "es": {
-        "welcome": "👋 *¡Bienvenido a KING NI Predict Bot !*\n\nElige una opción a continuación :",
-        "menu_pred_today": "🔮 Pronósticos de hoy",
-        "menu_by_league": "🏆 Por liga",
-        "menu_week": "📅 Pronósticos de la semana",
-        "menu_search": "⚽ Buscar equipo",
-        "menu_stats": "📊 Estadísticas",
-        "menu_live": "📡 En directo",
-        "menu_follow": "🔔 Seguir un equipo",
-        "menu_backtest": "📈 Backtesting",
-        "menu_trends": "📊 Mis tendencias",
-        "menu_help": "❓ Ayuda",
-        "menu_reset": "🔄 Reiniciar",
-        "no_matches": "⚠️ No se encontraron partidos.",
-        "loading": "⏳ *Cargando...*",
-        "back": "🔙 Volver",
-        "choose_league": "🏆 *Elige una liga :*",
-        "choose_match": "⚽ *Elige un partido :*",
     }
 }
 
 def detect_language(message):
     lang = "fr"
-    if message.from_user.language_code:
-        if message.from_user.language_code.startswith("en"):
-            lang = "en"
-        elif message.from_user.language_code.startswith("es"):
-            lang = "es"
+    if message.from_user.language_code and message.from_user.language_code.startswith("en"):
+        lang = "en"
     return lang
 
 # ------------------------------------------------------------
@@ -132,29 +153,21 @@ def detect_language(message):
 def init_db():
     conn = sqlite3.connect('predictions.db')
     cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS predictions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT, home_team TEXT, away_team TEXT, market TEXT,
-            prob_home REAL, prob_draw REAL, prob_away REAL,
-            prediction TEXT, actual_result TEXT, user_id INTEGER, created_at TEXT
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY, chat_id TEXT, username TEXT, lang TEXT, created_at TEXT
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS followed_teams (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, team_name TEXT, created_at TEXT
-        )
-    ''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS predictions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, home_team TEXT, away_team TEXT,
+        market TEXT, prob_home REAL, prob_draw REAL, prob_away REAL,
+        prediction TEXT, actual_result TEXT, user_id INTEGER, created_at TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY, chat_id TEXT, username TEXT, lang TEXT, created_at TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS followed_teams (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, team_name TEXT, created_at TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS sent_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, match_id TEXT, sent_at TEXT)''')
     conn.commit()
     conn.close()
 
 # ------------------------------------------------------------
-# 6. FONCTIONS THE ODDS API
+# 6. API THE ODDS
 # ------------------------------------------------------------
 def odds_request(endpoint, params=None, retries=3):
     if params is None:
@@ -163,35 +176,31 @@ def odds_request(endpoint, params=None, retries=3):
     url = f"{ODDS_URL}{endpoint}"
     for attempt in range(retries):
         try:
-            response = requests.get(url, params=params, timeout=15)
-            if response.status_code == 200:
-                return response.json()
-            print(f"⚠️ Tentative {attempt+1}: erreur {response.status_code}")
-        except requests.exceptions.Timeout:
-            print(f"⚠️ Tentative {attempt+1}: TIMEOUT")
+            r = requests.get(url, params=params, timeout=15)
+            if r.status_code == 200:
+                return r.json()
         except Exception as e:
-            print(f"⚠️ Tentative {attempt+1}: {e}")
+            print(f"⚠️ {endpoint}: {e}")
         if attempt < retries - 1:
             time.sleep(2)
     return None
 
 def get_matches_for_league(sport_key, markets="h2h"):
-    endpoint = f"sports/{sport_key}/odds/"
-    params = {"regions": "eu,us", "markets": markets, "oddsFormat": "decimal"}
-    data = odds_request(endpoint, params=params)
+    data = odds_request(f"sports/{sport_key}/odds/",
+                        {"regions": "eu,us", "markets": markets, "oddsFormat": "decimal"})
     if not data:
         return None, "⚠️ Impossible de contacter l'API."
     if len(data) == 0:
         return None, "ℹ️ Aucun match pour ce championnat."
     matches = []
-    for event in data:
+    for ev in data:
         matches.append({
-            "id": event.get("id"),
-            "home_team": event.get("home_team", "Inconnu"),
-            "away_team": event.get("away_team", "Inconnu"),
-            "league_name": sport_key.replace("soccer_", "").replace("_", " ").title(),
-            "commence_time": event.get("commence_time", datetime.now().isoformat()),
-            "bookmakers": event.get("bookmakers", [])
+            "id": ev.get("id"),
+            "home_team": ev.get("home_team", "?"),
+            "away_team": ev.get("away_team", "?"),
+            "league_name": sport_key,
+            "commence_time": ev.get("commence_time", ""),
+            "bookmakers": ev.get("bookmakers", [])
         })
     matches.sort(key=lambda x: x.get("commence_time", ""))
     return matches, None
@@ -199,8 +208,9 @@ def get_matches_for_league(sport_key, markets="h2h"):
 def get_all_matches(days_ahead=None):
     all_matches = []
     today = datetime.now().date()
+    sports = get_sports()
     
-    for nom, cle in SPORTS.items():
+    for nom, cle in sports.items():
         matches, error = get_matches_for_league(cle, "h2h")
         if error or not matches:
             continue
@@ -210,32 +220,17 @@ def get_all_matches(days_ahead=None):
                 all_matches.append(m)
             else:
                 try:
-                    match_date = datetime.strptime(m.get("commence_time", "")[:10], "%Y-%m-%d").date()
-                    limit = today + timedelta(days=days_ahead)
-                    if today <= match_date <= limit:
+                    md = datetime.strptime(m.get("commence_time","")[:10], "%Y-%m-%d").date()
+                    if today <= md <= today + timedelta(days=days_ahead):
                         all_matches.append(m)
                 except:
                     continue
-    
     all_matches.sort(key=lambda x: x.get("commence_time", ""))
     return all_matches
 
 # ------------------------------------------------------------
 # 7. MARCHÉS ET PRONOSTICS
 # ------------------------------------------------------------
-def generate_progress_bar(value, total=100, length=10):
-    filled = int((value / total) * length)
-    return "█" * filled + "░" * (length - filled)
-
-def get_available_markets(match):
-    markets = []
-    for bm in match.get('bookmakers', []):
-        for market in bm.get('markets', []):
-            key = market.get('key')
-            if key and key not in markets:
-                markets.append(key)
-    return markets
-
 def get_market_predictions(match, market_type="h2h"):
     try:
         home = match["home_team"]
@@ -245,177 +240,203 @@ def get_market_predictions(match, market_type="h2h"):
                 if market.get('key') != market_type:
                     continue
                 outcomes = market.get('outcomes', [])
-                
                 if market_type == "h2h":
-                    odds_home = next((o["price"] for o in outcomes if o["name"] == home), None)
-                    odds_draw = next((o["price"] for o in outcomes if o["name"] == "Draw"), None)
-                    odds_away = next((o["price"] for o in outcomes if o["name"] == away), None)
-                    if None in (odds_home, odds_draw, odds_away):
+                    oh = next((o["price"] for o in outcomes if o["name"] == home), None)
+                    od = next((o["price"] for o in outcomes if o["name"] == "Draw"), None)
+                    oa = next((o["price"] for o in outcomes if o["name"] == away), None)
+                    if None in (oh, od, oa):
                         continue
-                    prob_home = (1/odds_home)*100
-                    prob_draw = (1/odds_draw)*100
-                    prob_away = (1/odds_away)*100
-                    total = prob_home + prob_draw + prob_away
-                    prob_home = (prob_home/total)*100
-                    prob_draw = (prob_draw/total)*100
-                    prob_away = (prob_away/total)*100
-                    if prob_home > prob_away and prob_home > prob_draw:
+                    ph = (1/oh)*100; pd = (1/od)*100; pa = (1/oa)*100
+                    t = ph + pd + pa
+                    ph = (ph/t)*100; pd = (pd/t)*100; pa = (pa/t)*100
+                    if ph > pa and ph > pd:
                         pred = f"🏠 {home}"
-                    elif prob_away > prob_home and prob_away > prob_draw:
+                    elif pa > ph and pa > pd:
                         pred = f"✈️ {away}"
                     else:
                         pred = "🤝 Nul"
-                    return {"type": "1X2", "prob_home": prob_home, "prob_draw": prob_draw, "prob_away": prob_away,
+                    return {"type": "1X2", "prob_home": ph, "prob_draw": pd, "prob_away": pa,
                             "prediction": pred,
-                            "display": f"🏠 {home} : {prob_home:.1f}% {generate_progress_bar(prob_home)}\n🤝 Nul : {prob_draw:.1f}% {generate_progress_bar(prob_draw)}\n✈️ {away} : {prob_away:.1f}% {generate_progress_bar(prob_away)}"}
-                
-                elif market_type == "totals":
-                    lines = []
-                    for o in outcomes:
-                        if o.get('price', 0) > 0 and o.get('point'):
-                            lines.append({"name": o["name"], "point": o.get("point", ""), "price": o["price"], "prob": (1/o["price"])*100})
-                    if not lines:
-                        continue
-                    best = max(lines, key=lambda x: x["prob"])
-                    return {"type": "Over/Under",
-                            "display": "\n".join([f"{l['name']} {l['point']} : {l['prob']:.1f}% {generate_progress_bar(l['prob'])}" for l in lines]),
-                            "prediction": f"{best['name']} {best['point']}"}
+                            "display": f"🏠 {home} : {ph:.1f}% {generate_progress_bar(ph)}\n🤝 Nul : {pd:.1f}% {generate_progress_bar(pd)}\n✈️ {away} : {pa:.1f}% {generate_progress_bar(pa)}",
+                            "odds": {"home": oh, "draw": od, "away": oa}}
         return {"error": f"Marché '{market_type}' non disponible."}
     except Exception as e:
         return {"error": str(e)}
 
-def save_prediction(home, away, market, prob_h, prob_d, prob_a, pred, user_id=None):
-    conn = sqlite3.connect('predictions.db')
-    cursor = conn.cursor()
-    cursor.execute('''INSERT INTO predictions (date, home_team, away_team, market, prob_home, prob_draw, prob_away, prediction, user_id, created_at)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                   (datetime.now().strftime("%Y-%m-%d"), home, away, market, prob_h, prob_d, prob_a, pred, user_id, datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
+def get_best_odds(match):
+    best = {"home": (0, ""), "draw": (0, ""), "away": (0, "")}
+    for bm in match.get('bookmakers', []):
+        name = bm.get('title', bm.get('key', '?'))
+        for market in bm.get('markets', []):
+            if market.get('key') != 'h2h':
+                continue
+            for o in market.get('outcomes', []):
+                if o['name'] == match['home_team'] and o['price'] > best['home'][0]:
+                    best['home'] = (o['price'], name)
+                elif o['name'] == 'Draw' and o['price'] > best['draw'][0]:
+                    best['draw'] = (o['price'], name)
+                elif o['name'] == match['away_team'] and o['price'] > best['away'][0]:
+                    best['away'] = (o['price'], name)
+    return best
 
-def get_stats(user_id=None):
-    conn = sqlite3.connect('predictions.db')
-    cursor = conn.cursor()
-    if user_id:
-        cursor.execute('SELECT COUNT(*), SUM(CASE WHEN actual_result = prediction THEN 1 ELSE 0 END) FROM predictions WHERE user_id = ? AND actual_result IS NOT NULL', (user_id,))
-    else:
-        cursor.execute('SELECT COUNT(*), SUM(CASE WHEN actual_result = prediction THEN 1 ELSE 0 END) FROM predictions WHERE actual_result IS NOT NULL')
-    total, correct = cursor.fetchone()
-    conn.close()
-    if total and total > 0:
-        return f"📊 *Statistiques*\n\nPronostics : {total}\nJustes : {correct or 0}\nTaux : {((correct or 0) / total * 100):.1f}%"
-    return "📊 Aucune donnée disponible."
+def format_best_odds(match):
+    best = get_best_odds(match)
+    texte = "🏆 *Meilleures cotes*\n\n"
+    texte += f"🏠 {match['home_team']} : *{best['home'][0]}* ({best['home'][1]})\n"
+    texte += f"🤝 Nul : *{best['draw'][0]}* ({best['draw'][1]})\n"
+    texte += f"✈️ {match['away_team']} : *{best['away'][0]}* ({best['away'][1]})\n"
+    return texte
 
-def calculate_backtest(user_id=None, days=30):
-    return get_stats(user_id)
+def analyze_value(match):
+    pred = get_market_predictions(match, "h2h")
+    if "error" in pred:
+        return "❌ Analyse non disponible"
+    best = get_best_odds(match)
+    texte = "💎 *Analyse de valeur*\n\n"
+    implied_prob = 100 / best['home'][0] if best['home'][0] > 0 else 0
+    valeur = pred['prob_home'] - implied_prob
+    emoji = "🟢" if valeur > 3 else ("🟡" if valeur > -3 else "🔴")
+    texte += f"{emoji} 🏠 {match['home_team']}\n   Proba : {pred['prob_home']:.1f}% | Cote : {best['home'][0]} | Valeur : {valeur:+.1f}\n"
+    implied_prob = 100 / best['draw'][0] if best['draw'][0] > 0 else 0
+    valeur = pred['prob_draw'] - implied_prob
+    emoji = "🟢" if valeur > 3 else ("🟡" if valeur > -3 else "🔴")
+    texte += f"{emoji} 🤝 Nul\n   Proba : {pred['prob_draw']:.1f}% | Cote : {best['draw'][0]} | Valeur : {valeur:+.1f}\n"
+    implied_prob = 100 / best['away'][0] if best['away'][0] > 0 else 0
+    valeur = pred['prob_away'] - implied_prob
+    emoji = "🟢" if valeur > 3 else ("🟡" if valeur > -3 else "🔴")
+    texte += f"{emoji} ✈️ {match['away_team']}\n   Proba : {pred['prob_away']:.1f}% | Cote : {best['away'][0]} | Valeur : {valeur:+.1f}\n"
+    texte += "\n🟢 Valeur positive  🟡 Neutre  🔴 À éviter"
+    return texte
 
 # ------------------------------------------------------------
-# 8. UTILISATEURS ET SUIVI
+# 8. LOGO (TheSportsDB)
+# ------------------------------------------------------------
+_logo_cache = {}
+def get_team_logo(team_name):
+    if team_name in _logo_cache:
+        return _logo_cache[team_name]
+    try:
+        url = f"https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t={team_name.replace(' ', '%20')}"
+        r = requests.get(url, timeout=8)
+        if r.status_code == 200:
+            data = r.json()
+            if data.get("teams"):
+                logo = data["teams"][0].get("strTeamBadge") or data["teams"][0].get("strTeamLogo")
+                _logo_cache[team_name] = logo
+                return logo
+    except:
+        pass
+    _logo_cache[team_name] = None
+    return None
+
+# ------------------------------------------------------------
+# 9. BASE UTILISATEURS
 # ------------------------------------------------------------
 def register_user(user_id, chat_id, username, lang="fr"):
     conn = sqlite3.connect('predictions.db')
-    cursor = conn.cursor()
-    cursor.execute('INSERT OR IGNORE INTO users (user_id, chat_id, username, lang, created_at) VALUES (?, ?, ?, ?, ?)',
-                   (user_id, chat_id, username, lang, datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
+    cur = conn.cursor()
+    cur.execute('INSERT OR IGNORE INTO users (user_id, chat_id, username, lang, created_at) VALUES (?, ?, ?, ?, ?)',
+                (user_id, chat_id, username, lang, datetime.now().isoformat()))
+    conn.commit(); conn.close()
 
 def get_user_lang(user_id):
     conn = sqlite3.connect('predictions.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT lang FROM users WHERE user_id = ?', (user_id,))
-    row = cursor.fetchone()
-    conn.close()
+    cur = conn.cursor()
+    cur.execute('SELECT lang FROM users WHERE user_id = ?', (user_id,))
+    row = cur.fetchone(); conn.close()
     return row[0] if row else "fr"
 
 def add_followed_team(user_id, team_name):
     conn = sqlite3.connect('predictions.db')
-    cursor = conn.cursor()
-    cursor.execute('INSERT INTO followed_teams (user_id, team_name, created_at) VALUES (?, ?, ?)',
-                   (user_id, team_name, datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
+    cur = conn.cursor()
+    cur.execute('INSERT INTO followed_teams (user_id, team_name, created_at) VALUES (?, ?, ?)',
+                (user_id, team_name, datetime.now().isoformat()))
+    conn.commit(); conn.close()
 
 def get_followed_teams(user_id):
     conn = sqlite3.connect('predictions.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT team_name FROM followed_teams WHERE user_id = ?', (user_id,))
-    rows = cursor.fetchall()
-    conn.close()
+    cur = conn.cursor()
+    cur.execute('SELECT team_name FROM followed_teams WHERE user_id = ?', (user_id,))
+    rows = cur.fetchall(); conn.close()
     return rows
 
-# ------------------------------------------------------------
-# 9. RECHERCHE D'ÉQUIPE
-# ------------------------------------------------------------
-def search_team(team_name):
-    resultats = []
-    team_clean = team_name.strip().lower()
-    if not team_clean:
-        return "❌ Entre un nom d'équipe valide."
-    matches = get_all_matches(days_ahead=None)
-    if not matches:
-        return "⚠️ Aucun match trouvé."
-    for match in matches:
-        if team_clean in match["home_team"].lower() or team_clean in match["away_team"].lower():
-            pred = get_market_predictions(match, "h2h")
-            if "error" in pred:
-                continue
-            date_str = format_date(match.get("commence_time", ""))
-            resultats.append(f"📅 {date_str} | {match['league_name']}\n⚽ {match['home_team']} vs {match['away_team']}\n   🏠 {pred['prob_home']:.1f}% {generate_progress_bar(pred['prob_home'])}\n   🤝 Nul : {pred['prob_draw']:.1f}% {generate_progress_bar(pred['prob_draw'])}\n   ✈️ {pred['prob_away']:.1f}% {generate_progress_bar(pred['prob_away'])}\n   ✅ *{pred['prediction']}*\n")
-    if not resultats:
-        return f"❌ Aucun match pour *{team_name}*."
-    return "\n\n".join(resultats)
+def remove_followed_team(user_id, team_name):
+    conn = sqlite3.connect('predictions.db')
+    cur = conn.cursor()
+    cur.execute('DELETE FROM followed_teams WHERE user_id = ? AND team_name = ?', (user_id, team_name))
+    conn.commit(); conn.close()
 
-# ------------------------------------------------------------
-# 9b. LOGOS DES ÉQUIPES (TheSportsDB - gratuit)
-# ------------------------------------------------------------
-_team_logo_cache = {}
+def save_prediction(home, away, market, ph, pd, pa, pred, user_id=None):
+    conn = sqlite3.connect('predictions.db')
+    cur = conn.cursor()
+    cur.execute('''INSERT INTO predictions (date, home_team, away_team, market, prob_home, prob_draw, prob_away, prediction, user_id, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (datetime.now().strftime("%Y-%m-%d"), home, away, market, ph, pd, pa, pred, user_id, datetime.now().isoformat()))
+    conn.commit(); conn.close()
 
-def get_team_logo(team_name):
-    """Récupère l'URL du logo d'une équipe via TheSportsDB (gratuit)."""
-    if team_name in _team_logo_cache:
-        return _team_logo_cache[team_name]
-    
-    try:
-        url = f"https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t={team_name.replace(' ', '%20')}"
-        response = requests.get(url, timeout=8)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("teams"):
-                logo = data["teams"][0].get("strTeamBadge") or data["teams"][0].get("strTeamLogo")
-                _team_logo_cache[team_name] = logo
-                return logo
-    except Exception as e:
-        print(f"⚠️ Erreur logo {team_name}: {e}")
-    
-    _team_logo_cache[team_name] = None
-    return None
+def get_stats(user_id=None):
+    conn = sqlite3.connect('predictions.db')
+    cur = conn.cursor()
+    if user_id:
+        cur.execute('SELECT COUNT(*), SUM(CASE WHEN actual_result = prediction THEN 1 ELSE 0 END) FROM predictions WHERE user_id = ? AND actual_result IS NOT NULL', (user_id,))
+    else:
+        cur.execute('SELECT COUNT(*), SUM(CASE WHEN actual_result = prediction THEN 1 ELSE 0 END) FROM predictions WHERE actual_result IS NOT NULL')
+    total, correct = cur.fetchone(); conn.close()
+    if total and total > 0:
+        return f"📊 *Statistiques*\n\nPronostics : {total}\nJustes : {correct or 0}\nTaux : {((correct or 0) / total * 100):.1f}%"
+    return "📊 Aucune donnée disponible."
 
 # ------------------------------------------------------------
 # 10. NOTIFICATIONS
 # ------------------------------------------------------------
 def send_notifications():
     conn = sqlite3.connect('predictions.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT DISTINCT user_id FROM followed_teams')
-    users = cursor.fetchall()
+    cur = conn.cursor()
+    cur.execute('SELECT DISTINCT user_id FROM followed_teams')
+    users = cur.fetchall()
     conn.close()
     for (user_id,) in users:
         teams = get_followed_teams(user_id)
-        for (team_name,) in teams:
-            matches = get_all_matches(days_ahead=7)
-            for match in matches:
-                if team_name.lower() in match['home_team'].lower() or team_name.lower() in match['away_team'].lower():
+        matches = get_all_matches(days_ahead=7)
+        for match in matches:
+            mid = str(match.get('id', ''))
+            home = match['home_team'].lower()
+            away = match['away_team'].lower()
+            for (team_name,) in teams:
+                t = team_name.lower()
+                if t in home or t in away:
+                    conn = sqlite3.connect('predictions.db')
+                    cur = conn.cursor()
+                    cur.execute('SELECT COUNT(*) FROM sent_notifications WHERE user_id = ? AND match_id = ?', (user_id, mid))
+                    already = cur.fetchone()[0]
+                    conn.close()
+                    if already:
+                        continue
                     pred = get_market_predictions(match, "h2h")
-                    if "error" not in pred:
-                        msg = f"🔔 *Match de {team_name}*\n\n⚽ {match['home_team']} vs {match['away_team']}\n🏠 {pred['prob_home']:.1f}%\n🤝 {pred['prob_draw']:.1f}%\n✈️ {pred['prob_away']:.1f}%\n✅ *{pred['prediction']}*"
-                        try:
-                            bot.send_message(user_id, msg, parse_mode="Markdown")
-                        except:
-                            pass
+                    if "error" in pred:
+                        continue
+                    dt = format_datetime(match.get('commence_time', ''))
+                    league = match.get('league_name', '')
+                    msg = (f"🔔 *Match de {team_name}*\n"
+                           f"🏆 {league}\n"
+                           f"📅 {dt}\n\n"
+                           f"⚽ *{match['home_team']} vs {match['away_team']}*\n\n"
+                           f"🏠 {match['home_team']} : {pred['prob_home']:.1f}%\n"
+                           f"🤝 Nul : {pred['prob_draw']:.1f}%\n"
+                           f"✈️ {match['away_team']} : {pred['prob_away']:.1f}%\n\n"
+                           f"✅ *Pronostic : {pred['prediction']}*")
+                    try:
+                        bot.send_message(user_id, msg, parse_mode="Markdown")
+                        conn = sqlite3.connect('predictions.db')
+                        cur = conn.cursor()
+                        cur.execute('INSERT INTO sent_notifications (user_id, match_id, sent_at) VALUES (?, ?, ?)',
+                                    (user_id, mid, datetime.now().isoformat()))
+                        conn.commit(); conn.close()
+                    except Exception as e:
+                        print(f"Erreur notif: {e}")
 
 def run_scheduler():
-    schedule.every().day.at("08:00").do(send_notifications)
+    schedule.every().hour.do(send_notifications)
     while True:
         schedule.run_pending()
         time.sleep(60)
@@ -432,7 +453,6 @@ def menu_options(lang="fr"):
         KeyboardButton(texts["menu_by_league"]),
         KeyboardButton(texts["menu_search"]),
         KeyboardButton(texts["menu_stats"]),
-        KeyboardButton(texts["menu_live"]),
         KeyboardButton(texts["menu_follow"]),
         KeyboardButton(texts["menu_backtest"]),
         KeyboardButton(texts["menu_trends"]),
@@ -441,29 +461,46 @@ def menu_options(lang="fr"):
     )
     return markup
 
-def menu_ligues_inline(lang="fr"):
+def menu_ligues_inline(lang="fr", page=0):
     texts = LANGUAGES.get(lang, LANGUAGES["fr"])
     markup = InlineKeyboardMarkup(row_width=2)
-    for nom, cle in SPORTS.items():
-        markup.add(InlineKeyboardButton(nom, callback_data=f"league_{cle}"))
+    sports = get_sports()
+    items = list(sports.items())
+    per_page = 20
+    start = page * per_page
+    end = start + per_page
+    for nom, cle in items[start:end]:
+        display = nom if len(nom) <= 30 else nom[:29] + "…"
+        markup.add(InlineKeyboardButton(display, callback_data=f"league_{cle}"))
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("⬅️ Préc.", callback_data=f"lgpage_{page-1}"))
+    if end < len(items):
+        nav.append(InlineKeyboardButton("Suiv. ➡️", callback_data=f"lgpage_{page+1}"))
+    if nav:
+        markup.add(*nav)
+    markup.add(InlineKeyboardButton(f"📊 {len(sports)} ligues au total", callback_data="noop"))
     markup.add(InlineKeyboardButton(texts["back"], callback_data="menu_back"))
     return markup
 
-def menu_matchs_inline(league_key, matches, lang="fr"):
+def menu_matchs_list(matches, prefix="match_day", lang="fr", page=0):
     texts = LANGUAGES.get(lang, LANGUAGES["fr"])
     markup = InlineKeyboardMarkup(row_width=1)
-    for i, m in enumerate(matches[:10]):
-        date = format_date(m.get("commence_time", ""))
-        markup.add(InlineKeyboardButton(f"📅 {date} | {m['home_team']} vs {m['away_team']}", callback_data=f"match_{league_key}_{i}"))
-    markup.add(InlineKeyboardButton(texts["back"], callback_data="choose_league"))
-    return markup
-
-def menu_matchs_list(matches, prefix="match_day", lang="fr"):
-    texts = LANGUAGES.get(lang, LANGUAGES["fr"])
-    markup = InlineKeyboardMarkup(row_width=1)
-    for i, m in enumerate(matches[:20]):
-        date = format_date(m.get("commence_time", ""))
-        markup.add(InlineKeyboardButton(f"📅 {date} | {m['home_team']} vs {m['away_team']}", callback_data=f"{prefix}_{i}"))
+    per_page = 10
+    start = page * per_page
+    end = start + per_page
+    for i, m in enumerate(matches[start:end]):
+        dt = format_datetime(m.get("commence_time", ""))
+        idx = start + i
+        markup.add(InlineKeyboardButton(f"📅 {dt}\n⚽ {m['home_team']} vs {m['away_team']}",
+                                         callback_data=f"{prefix}_{idx}"))
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("⬅️ Précédent", callback_data=f"page_{prefix}_{page-1}"))
+    if end < len(matches):
+        nav.append(InlineKeyboardButton("Suivant ➡️", callback_data=f"page_{prefix}_{page+1}"))
+    if nav:
+        markup.add(*nav)
     markup.add(InlineKeyboardButton(texts["back"], callback_data="menu_back"))
     return markup
 
@@ -471,9 +508,19 @@ def menu_match_actions(match_id, lang="fr"):
     texts = LANGUAGES.get(lang, LANGUAGES["fr"])
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(InlineKeyboardButton("🔮 1X2", callback_data=f"market_{match_id}_h2h"))
-    markup.add(InlineKeyboardButton("📈 Over/Under", callback_data=f"market_{match_id}_totals"))
+    markup.add(InlineKeyboardButton("🏆 Meilleures cotes", callback_data=f"bestodds_{match_id}"))
+    markup.add(InlineKeyboardButton("💎 Analyse de valeur", callback_data=f"value_{match_id}"))
     markup.add(InlineKeyboardButton("🖼️ Voir les logos", callback_data=f"logos_{match_id}"))
     markup.add(InlineKeyboardButton(texts["back"], callback_data="back_to_matches"))
+    return markup
+
+def menu_matchs_inline_list(sport_key, matches, lang="fr"):
+    markup = InlineKeyboardMarkup(row_width=1)
+    for i, m in enumerate(matches[:10]):
+        dt = format_datetime(m.get("commence_time", ""))
+        markup.add(InlineKeyboardButton(f"📅 {dt}\n⚽ {m['home_team']} vs {m['away_team']}",
+                                         callback_data=f"match_league_{sport_key}_{i}"))
+    markup.add(InlineKeyboardButton("🔙 Retour", callback_data="choose_league"))
     return markup
 
 # ------------------------------------------------------------
@@ -481,7 +528,7 @@ def menu_match_actions(match_id, lang="fr"):
 # ------------------------------------------------------------
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 bot.match_cache = {}
-bot.day_matches = []
+bot.current_matches_list = []
 bot.current_match_data = {}
 
 def send_welcome(message):
@@ -493,9 +540,17 @@ def send_welcome(message):
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     bot.match_cache = {}
-    bot.day_matches = []
+    bot.current_matches_list = []
     bot.current_match_data = {}
     send_welcome(message)
+
+@bot.message_handler(commands=['refresh'])
+def handle_refresh(message):
+    global _SPORTS_CACHE, _SPORTS_CACHE_TIME
+    _SPORTS_CACHE = None
+    _SPORTS_CACHE_TIME = None
+    new_sports = get_sports()
+    bot.reply_to(message, f"✅ Liste des championnats mise à jour : {len(new_sports)} ligues disponibles.")
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callback(call):
@@ -506,76 +561,122 @@ def handle_callback(call):
         lang = get_user_lang(user_id)
         texts = LANGUAGES.get(lang, LANGUAGES["fr"])
 
+        if call.data == "noop":
+            return
+
         if call.data == "menu_back":
             bot.send_message(chat_id, texts["welcome"], parse_mode="Markdown", reply_markup=menu_options(lang))
-        elif call.data == "choose_league":
-            bot.send_message(chat_id, texts["choose_league"], parse_mode="Markdown", reply_markup=menu_ligues_inline(lang))
-        elif call.data == "back_to_matches":
-            if bot.day_matches:
-                bot.send_message(chat_id, f"🔮 {len(bot.day_matches)} matchs :", parse_mode="Markdown", reply_markup=menu_matchs_list(bot.day_matches, "match_day", lang))
+            return
+
+        if call.data == "choose_league":
+            bot.send_message(chat_id, texts["choose_league"], parse_mode="Markdown", reply_markup=menu_ligues_inline(lang, 0))
+            return
+
+        if call.data.startswith("lgpage_"):
+            page = int(call.data.replace("lgpage_", ""))
+            bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=menu_ligues_inline(lang, page))
+            return
+
+        if call.data == "back_to_matches":
+            if bot.current_matches_list:
+                bot.send_message(chat_id, f"🔮 *{len(bot.current_matches_list)} matchs*",
+                                 parse_mode="Markdown",
+                                 reply_markup=menu_matchs_list(bot.current_matches_list, "match_day", lang))
             else:
                 bot.send_message(chat_id, texts["back"], parse_mode="Markdown", reply_markup=menu_ligues_inline(lang))
-        elif call.data.startswith("league_"):
+            return
+
+        if call.data.startswith("league_"):
             sport_key = call.data.replace("league_", "")
             loading = bot.send_message(chat_id, texts["loading"], parse_mode="Markdown")
             matches, error = get_matches_for_league(sport_key)
             if error or not matches:
                 bot.edit_message_text(error or texts["no_matches"], chat_id, loading.message_id)
                 return
-            nom_ligue = next((k for k, v in SPORTS.items() if v == sport_key), sport_key)
+            sports = get_sports()
+            nom_ligue = next((k for k, v in sports.items() if v == sport_key), sport_key)
             for i, m in enumerate(matches[:10]):
                 m["league_name"] = nom_ligue
-                bot.match_cache[f"match_{sport_key}_{i}"] = m
+                bot.match_cache[f"match_league_{sport_key}_{i}"] = m
             bot.delete_message(chat_id, loading.message_id)
-            bot.send_message(chat_id, texts["choose_match"], parse_mode="Markdown", reply_markup=menu_matchs_inline(sport_key, matches, lang))
-        elif call.data.startswith("match_"):
+            bot.send_message(chat_id, texts["choose_match"], parse_mode="Markdown",
+                             reply_markup=menu_matchs_inline_list(sport_key, matches, lang))
+            return
+
+        if call.data.startswith("page_"):
+            parts = call.data.replace("page_", "").rsplit("_", 1)
+            prefix = parts[0]
+            page = int(parts[1])
+            if bot.current_matches_list:
+                bot.send_message(chat_id, f"📄 Page {page+1}",
+                                 parse_mode="Markdown",
+                                 reply_markup=menu_matchs_list(bot.current_matches_list, prefix, lang, page))
+            return
+
+        if call.data.startswith("match_day_") or call.data.startswith("match_league_"):
             match = bot.match_cache.get(call.data)
             if not match:
                 bot.send_message(chat_id, "❌ Match introuvable.")
                 return
             bot.current_match_data[call.data] = match
-            bot.send_message(chat_id, f"⚽ *{match['home_team']} vs {match['away_team']}*\n🏆 {match.get('league_name', '')}", parse_mode="Markdown", reply_markup=menu_match_actions(call.data, lang))
-        elif call.data.startswith("logos_"):
-            match_id = call.data.replace("logos_", "")
-            match = bot.current_match_data.get(match_id) or bot.match_cache.get(match_id)
+            dt = format_datetime(match.get("commence_time", ""))
+            league = match.get('league_name', 'Championnat inconnu')
+            texte = (f"🏆 *{league}*\n"
+                     f"📅 {dt}\n\n"
+                     f"⚽ *{match['home_team']} vs {match['away_team']}*")
+            bot.send_message(chat_id, texte, parse_mode="Markdown",
+                             reply_markup=menu_match_actions(call.data, lang))
+            return
+
+        if call.data.startswith("logos_"):
+            mid = call.data.replace("logos_", "")
+            match = bot.current_match_data.get(mid) or bot.match_cache.get(mid)
             if not match:
                 bot.send_message(chat_id, "❌ Match introuvable.")
                 return
-            
             loading = bot.send_message(chat_id, "⏳ *Récupération des logos...*", parse_mode="Markdown")
-            
-            home_logo = get_team_logo(match['home_team'])
-            away_logo = get_team_logo(match['away_team'])
-            
+            hl = get_team_logo(match['home_team'])
+            al = get_team_logo(match['away_team'])
             bot.delete_message(chat_id, loading.message_id)
-            
-            if home_logo and away_logo:
+            if hl:
                 try:
-                    bot.send_photo(chat_id, home_logo, caption=f"🏠 *{match['home_team']}*", parse_mode="Markdown")
-                except:
-                    pass
+                    bot.send_photo(chat_id, hl, caption=f"🏠 *{match['home_team']}*", parse_mode="Markdown")
+                except: pass
+            if al:
                 try:
-                    bot.send_photo(chat_id, away_logo, caption=f"✈️ *{match['away_team']}*", parse_mode="Markdown")
-                except:
-                    pass
-                bot.send_message(chat_id, f"⚽ *{match['home_team']} vs {match['away_team']}*", parse_mode="Markdown", reply_markup=menu_match_actions(match_id, lang))
-            elif home_logo:
-                try:
-                    bot.send_photo(chat_id, home_logo, caption=f"🏠 *{match['home_team']}*\n_(Logo de {match['away_team']} introuvable)_", parse_mode="Markdown", reply_markup=menu_match_actions(match_id, lang))
-                except:
-                    bot.send_message(chat_id, "❌ Impossible d'envoyer le logo.")
-            elif away_logo:
-                try:
-                    bot.send_photo(chat_id, away_logo, caption=f"✈️ *{match['away_team']}*\n_(Logo de {match['home_team']} introuvable)_", parse_mode="Markdown", reply_markup=menu_match_actions(match_id, lang))
-                except:
-                    bot.send_message(chat_id, "❌ Impossible d'envoyer le logo.")
-            else:
-                bot.send_message(chat_id, "❌ Logos non disponibles pour ce match.", reply_markup=menu_match_actions(match_id, lang))
-        elif call.data.startswith("market_"):
-            parts = call.data.replace("market_", "").split("_")
+                    bot.send_photo(chat_id, al, caption=f"✈️ *{match['away_team']}*", parse_mode="Markdown")
+                except: pass
+            if not hl and not al:
+                bot.send_message(chat_id, "❌ Logos non disponibles.")
+            return
+
+        if call.data.startswith("bestodds_"):
+            mid = call.data.replace("bestodds_", "")
+            match = bot.current_match_data.get(mid) or bot.match_cache.get(mid)
+            if not match:
+                bot.send_message(chat_id, "❌ Match introuvable.")
+                return
+            texte = format_best_odds(match)
+            bot.send_message(chat_id, texte, parse_mode="Markdown",
+                             reply_markup=menu_match_actions(mid, lang))
+            return
+
+        if call.data.startswith("value_"):
+            mid = call.data.replace("value_", "")
+            match = bot.current_match_data.get(mid) or bot.match_cache.get(mid)
+            if not match:
+                bot.send_message(chat_id, "❌ Match introuvable.")
+                return
+            texte = analyze_value(match)
+            bot.send_message(chat_id, texte, parse_mode="Markdown",
+                             reply_markup=menu_match_actions(mid, lang))
+            return
+
+        if call.data.startswith("market_"):
+            parts = call.data.replace("market_", "").rsplit("_", 1)
             market_type = parts[-1]
-            match_id = "_".join(parts[:-1])
-            match = bot.current_match_data.get(match_id) or bot.match_cache.get(match_id)
+            mid = parts[0]
+            match = bot.current_match_data.get(mid) or bot.match_cache.get(mid)
             if not match:
                 bot.send_message(chat_id, "❌ Match introuvable.")
                 return
@@ -586,17 +687,29 @@ def handle_callback(call):
             save_prediction(match['home_team'], match['away_team'], pred.get('type', market_type),
                             pred.get('prob_home', 0), pred.get('prob_draw', 0), pred.get('prob_away', 0),
                             pred['prediction'], user_id)
-            texte = f"⚽ *{match['home_team']} vs {match['away_team']}*\n📊 *{pred.get('type', market_type)}*\n\n{pred['display']}\n\n✅ *{pred['prediction']}*"
+            dt = format_datetime(match.get("commence_time", ""))
+            texte = (f"🏆 *{match.get('league_name', '')}*\n"
+                     f"📅 {dt}\n\n"
+                     f"⚽ *{match['home_team']} vs {match['away_team']}*\n"
+                     f"📊 *{pred.get('type', market_type)}*\n\n"
+                     f"{pred['display']}\n\n"
+                     f"✅ *{pred['prediction']}*")
             bot.send_message(chat_id, texte, parse_mode="Markdown", reply_markup=menu_options(lang))
-        elif call.data == "unfollow_all":
+            return
+
+        if call.data == "unfollow_all":
             conn = sqlite3.connect('predictions.db')
-            cursor = conn.cursor()
-            cursor.execute('DELETE FROM followed_teams WHERE user_id = ?', (user_id,))
-            conn.commit()
-            conn.close()
-            bot.send_message(chat_id, "✅ Toutes les équipes ont été retirées.")
+            cur = conn.cursor()
+            cur.execute('DELETE FROM followed_teams WHERE user_id = ?', (user_id,))
+            conn.commit(); conn.close()
+            bot.send_message(chat_id, "✅ Équipes suivies supprimées.")
+            return
+
     except Exception as e:
         print(f"❌ Erreur callback: {e}")
+        try:
+            bot.send_message(call.message.chat.id, f"❌ Erreur : {str(e)[:100]}")
+        except: pass
 
 @bot.message_handler(func=lambda m: True)
 def handle_text(message):
@@ -611,67 +724,108 @@ def handle_text(message):
 
     if text == texts["menu_reset"]:
         bot.match_cache = {}
-        bot.day_matches = []
+        bot.current_matches_list = []
         send_welcome(message)
-    elif text == texts["menu_pred_today"]:
+        return
+
+    if text == texts["menu_pred_today"]:
         loading = bot.reply_to(message, texts["loading"], parse_mode="Markdown")
         all_matches = get_all_matches(days_ahead=1)
         if not all_matches:
             bot.edit_message_text("⚠️ Aucun match aujourd'hui ou demain.", chat_id, loading.message_id)
             return
-        bot.day_matches = all_matches[:20]
-        for i, m in enumerate(bot.day_matches):
+        bot.current_matches_list = all_matches[:50]
+        for i, m in enumerate(bot.current_matches_list):
             bot.match_cache[f"match_day_{i}"] = m
         bot.delete_message(chat_id, loading.message_id)
-        bot.send_message(chat_id, f"🔮 *Pronostics du jour*\n\n{len(bot.day_matches)} matchs :", parse_mode="Markdown", reply_markup=menu_matchs_list(bot.day_matches, "match_day", lang))
-    elif text == texts["menu_week"]:
+        bot.send_message(chat_id, f"🔮 *Pronostics du jour*\n\n{len(bot.current_matches_list)} matchs :",
+                         parse_mode="Markdown",
+                         reply_markup=menu_matchs_list(bot.current_matches_list, "match_day", lang, 0))
+        return
+
+    if text == texts["menu_week"]:
         loading = bot.reply_to(message, texts["loading"], parse_mode="Markdown")
         all_matches = get_all_matches(days_ahead=7)
         if not all_matches:
             bot.edit_message_text("⚠️ Aucun match dans les 7 prochains jours.", chat_id, loading.message_id)
             return
-        bot.day_matches = all_matches[:30]
-        for i, m in enumerate(bot.day_matches):
+        bot.current_matches_list = all_matches[:50]
+        for i, m in enumerate(bot.current_matches_list):
             bot.match_cache[f"match_day_{i}"] = m
         bot.delete_message(chat_id, loading.message_id)
-        bot.send_message(chat_id, f"📅 *Pronostics de la semaine*\n\n{len(bot.day_matches)} matchs :", parse_mode="Markdown", reply_markup=menu_matchs_list(bot.day_matches, "match_day", lang))
-    elif text == texts["menu_by_league"]:
-        bot.reply_to(message, texts["choose_league"], parse_mode="Markdown", reply_markup=menu_ligues_inline(lang))
-    elif text == texts["menu_search"]:
-        bot.reply_to(message, "⚽ *Recherche d'équipe*\n\nEnvoie le nom d'une équipe (ex: `Arsenal`).", parse_mode="Markdown", reply_markup=menu_options(lang))
-    elif text == texts["menu_stats"]:
+        bot.send_message(chat_id, f"📅 *Pronostics de la semaine*\n\n{len(bot.current_matches_list)} matchs :",
+                         parse_mode="Markdown",
+                         reply_markup=menu_matchs_list(bot.current_matches_list, "match_day", lang, 0))
+        return
+
+    if text == texts["menu_by_league"]:
+        sports = get_sports()
+        bot.reply_to(message, f"🏆 *{len(sports)} championnats disponibles*\n\n{texts['choose_league']}",
+                     parse_mode="Markdown", reply_markup=menu_ligues_inline(lang, 0))
+        return
+
+    if text == texts["menu_search"]:
+        bot.reply_to(message, "⚽ *Recherche d'équipe*\n\nEnvoie le nom d'une équipe (ex: `Arsenal`).",
+                     parse_mode="Markdown", reply_markup=menu_options(lang))
+        return
+
+    if text == texts["menu_stats"]:
         bot.reply_to(message, get_stats(user_id), parse_mode="Markdown", reply_markup=menu_options(lang))
-    elif text == texts["menu_backtest"]:
-        bot.reply_to(message, calculate_backtest(user_id, 30), parse_mode="Markdown", reply_markup=menu_options(lang))
-    elif text == texts["menu_live"]:
-        bot.reply_to(message, "📡 Fonctionnalité en direct non disponible.", parse_mode="Markdown", reply_markup=menu_options(lang))
-    elif text == texts["menu_trends"]:
+        return
+
+    if text == texts["menu_backtest"]:
+        bot.reply_to(message, get_stats(user_id), parse_mode="Markdown", reply_markup=menu_options(lang))
+        return
+
+    if text == texts["menu_trends"]:
         followed = get_followed_teams(user_id)
         if not followed:
             bot.reply_to(message, "🔔 Tu ne suis aucune équipe.", parse_mode="Markdown", reply_markup=menu_options(lang))
             return
         texte = "📋 *Équipes suivies*\n\n" + "\n".join([f"- {t[0]}" for t in followed])
         bot.reply_to(message, texte, parse_mode="Markdown", reply_markup=menu_options(lang))
-    elif text == texts["menu_follow"]:
+        return
+
+    if text == texts["menu_follow"]:
         followed = get_followed_teams(user_id)
         if followed:
             markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton("🗑️ Ne plus rien suivre", callback_data="unfollow_all"))
+            markup.add(InlineKeyboardButton("🗑️ Tout supprimer", callback_data="unfollow_all"))
             bot.reply_to(message, "Tu suis : " + ", ".join([t[0] for t in followed]), reply_markup=markup)
         else:
             bot.reply_to(message, "🔔 Envoie `suivre Arsenal` pour suivre une équipe.", parse_mode="Markdown")
-    elif text == texts["menu_help"]:
-        bot.reply_to(message, "❓ *Aide*\n\nUtilise les boutons du menu pour naviguer.", parse_mode="Markdown", reply_markup=menu_options(lang))
-    elif text.lower().startswith("suivre ") or text.lower().startswith("follow "):
+        return
+
+    if text == texts["menu_help"]:
+        bot.reply_to(message, "❓ *Aide*\n\nUtilise les boutons du menu.", parse_mode="Markdown", reply_markup=menu_options(lang))
+        return
+
+    if text.lower().startswith("suivre ") or text.lower().startswith("follow "):
         team = text.split(" ", 1)[1].strip()
         add_followed_team(user_id, team)
-        bot.reply_to(message, f"✅ Tu suis *{team}*.", parse_mode="Markdown", reply_markup=menu_options(lang))
-    else:
-        loading = bot.reply_to(message, f"⏳ *Recherche de {text}...*", parse_mode="Markdown")
-        result = search_team(text)
-        if len(result) > 4000:
-            result = result[:4000] + "..."
-        bot.edit_message_text(result, chat_id, loading.message_id, parse_mode="Markdown", reply_markup=menu_options(lang))
+        bot.reply_to(message, f"✅ Tu suis *{team}*.\nTu recevras une notification à chaque match.",
+                     parse_mode="Markdown", reply_markup=menu_options(lang))
+        return
+
+    # Recherche libre
+    loading = bot.reply_to(message, f"⏳ *Recherche de {text}...*", parse_mode="Markdown")
+    matches = get_all_matches(days_ahead=None)
+    found = [m for m in matches if text.lower() in m['home_team'].lower() or text.lower() in m['away_team'].lower()]
+    if not found:
+        bot.edit_message_text(f"❌ Aucun match pour *{text}*.", chat_id, loading.message_id, parse_mode="Markdown")
+        return
+    texte = f"🔍 *{len(found)} match(s) trouvé(s)* :\n\n"
+    for m in found[:10]:
+        pred = get_market_predictions(m, "h2h")
+        if "error" in pred:
+            continue
+        dt = format_datetime(m.get("commence_time", ""))
+        texte += (f"🏆 {m['league_name']}\n"
+                  f"📅 {dt}\n"
+                  f"⚽ {m['home_team']} vs {m['away_team']}\n"
+                  f"🏠 {pred['prob_home']:.1f}% | 🤝 {pred['prob_draw']:.1f}% | ✈️ {pred['prob_away']:.1f}%\n"
+                  f"✅ *{pred['prediction']}*\n\n")
+    bot.edit_message_text(texte, chat_id, loading.message_id, parse_mode="Markdown", reply_markup=menu_options(lang))
 
 # ------------------------------------------------------------
 # 13. SERVEUR HTTP POUR RENDER
@@ -680,12 +834,9 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b'Bot is running!')
+        self.send_response(200); self.end_headers(); self.wfile.write(b'Bot is running!')
     def do_HEAD(self):
-        self.send_response(200)
-        self.end_headers()
+        self.send_response(200); self.end_headers()
 
 def run_http():
     HTTPServer(('0.0.0.0', 8000), Handler).serve_forever()
@@ -698,7 +849,9 @@ threading.Thread(target=run_http, daemon=True).start()
 if __name__ == "__main__":
     init_db()
     print("✅ Base de données initialisée.")
+    sports = get_sports()
+    print(f"✅ {len(sports)} championnats chargés.")
     threading.Thread(target=run_scheduler, daemon=True).start()
-    print("⏰ Notifications programmées à 8h.")
+    print("⏰ Notifications programmées (toutes les heures).")
     print("✅ Bot démarré.")
     bot.infinity_polling()
