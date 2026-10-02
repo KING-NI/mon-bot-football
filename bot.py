@@ -6,6 +6,7 @@ import schedule
 import time
 import threading
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 # ------------------------------------------------------------
@@ -17,7 +18,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID = os.getenv("CHAT_ID", "")
 
 # ------------------------------------------------------------
-# 2. LANGUES DISPONIBLES
+# 2. LANGUES
 # ------------------------------------------------------------
 LANG_FLAGS = {
     "fr": "🇫🇷 Français",
@@ -51,29 +52,29 @@ LANGUAGES = {
         "choose_market": "📊 *Choisis un marché :*",
         "no_match_today": "⚠️ Aucun match aujourd'hui.",
         "no_match_week": "⚠️ Aucun match dans les 7 prochains jours.",
-        "market_h2h": "🔮 1X2 (Victoire/Nul/Défaite)",
+        "market_h2h": "🔮 1X2",
         "market_spreads": "📐 Handicap",
-        "market_totals": "📈 Over/Under (Total buts)",
-        "no_market": "❌ Aucun marché disponible pour ce match.",
+        "market_totals": "📈 Over/Under",
+        "no_market": "❌ Aucun marché disponible.",
         "best_odds": "🏆 Meilleures cotes",
         "value_analysis": "💎 Analyse de valeur",
-        "search_prompt": "⚽ *Recherche d'équipe*\n\nEnvoie le nom d'une équipe (ex: `Arsenal`).",
-        "follow_prompt": "🔔 Envoie `suivre Arsenal` pour suivre une équipe.",
-        "following": "✅ Tu suis *{team}*.\nTu recevras une notification à chaque match.",
+        "search_prompt": "⚽ *Recherche*\n\nEnvoie un nom (ex: `Arsenal`).",
+        "follow_prompt": "🔔 Envoie `suivre Arsenal`.",
+        "following": "✅ Tu suis *{team}*.",
         "following_list": "📋 *Équipes suivies*",
         "stats_title": "📊 *Statistiques*",
         "stats_saved": "Pronostics :",
         "stats_correct": "Justes :",
         "stats_rate": "Taux :",
-        "no_data": "📊 Aucune donnée disponible.",
-        "help_text": "❓ *Aide*\n\nUtilise les boutons du menu pour naviguer.",
-        "matches_found": "🔍 *{count} match(s) trouvé(s)* :",
+        "no_data": "📊 Aucune donnée.",
+        "help_text": "❓ *Aide*\n\nUtilise les boutons.",
+        "matches_found": "🔍 *{count} match(s)* :",
         "page": "📄 Page",
         "prev": "⬅️ Précédent",
         "next": "Suivant ➡️",
         "prev_short": "⬅️ Préc.",
         "next_short": "Suiv. ➡️",
-        "total_leagues": "📊 {count} ligues au total",
+        "total_leagues": "📊 {count} ligues",
         "no_league_matches": "ℹ️ Aucun match pour ce championnat.",
         "match_count": "🔮 *{count} matchs :*",
     },
@@ -100,36 +101,36 @@ LANGUAGES = {
         "choose_market": "📊 *Choose a market :*",
         "no_match_today": "⚠️ No matches today.",
         "no_match_week": "⚠️ No matches in the next 7 days.",
-        "market_h2h": "🔮 1X2 (Win/Draw/Loss)",
+        "market_h2h": "🔮 1X2",
         "market_spreads": "📐 Handicap",
         "market_totals": "📈 Over/Under",
-        "no_market": "❌ No market available for this match.",
+        "no_market": "❌ No market available.",
         "best_odds": "🏆 Best odds",
         "value_analysis": "💎 Value analysis",
-        "search_prompt": "⚽ *Team search*\n\nSend a team name (e.g. `Arsenal`).",
-        "follow_prompt": "🔔 Send `follow Arsenal` to follow a team.",
-        "following": "✅ You now follow *{team}*.\nYou'll get a notification for each match.",
+        "search_prompt": "⚽ *Search*\n\nSend a name (e.g. `Arsenal`).",
+        "follow_prompt": "🔔 Send `follow Arsenal`.",
+        "following": "✅ You follow *{team}*.",
         "following_list": "📋 *Followed teams*",
         "stats_title": "📊 *Statistics*",
         "stats_saved": "Predictions:",
         "stats_correct": "Correct:",
         "stats_rate": "Rate:",
-        "no_data": "📊 No data available.",
-        "help_text": "❓ *Help*\n\nUse the menu buttons to navigate.",
-        "matches_found": "🔍 *{count} match(es) found* :",
+        "no_data": "📊 No data.",
+        "help_text": "❓ *Help*\n\nUse the buttons.",
+        "matches_found": "🔍 *{count} match(es)* :",
         "page": "📄 Page",
         "prev": "⬅️ Previous",
         "next": "Next ➡️",
         "prev_short": "⬅️ Prev",
         "next_short": "Next ➡️",
-        "total_leagues": "📊 {count} leagues total",
+        "total_leagues": "📊 {count} leagues",
         "no_league_matches": "ℹ️ No matches for this league.",
         "match_count": "🔮 *{count} matches:*",
     },
     "es": {
         "welcome": "👋 *¡Bienvenido a KING NI Predict Bot !*",
         "choose_lang": "🌐 *Elige tu idioma :*",
-        "lang_set": "✅ Idioma establecido en *Español*.",
+        "lang_set": "✅ Idioma: *Español*.",
         "menu_pred_today": "🔮 Pronósticos de hoy",
         "menu_week": "📅 Pronósticos de la semana",
         "menu_by_league": "🏆 Por liga",
@@ -141,44 +142,44 @@ LANGUAGES = {
         "menu_lang": "🌐 Idioma",
         "menu_help": "❓ Ayuda",
         "menu_reset": "🔄 Reiniciar",
-        "no_matches": "⚠️ No se encontraron partidos.",
+        "no_matches": "⚠️ Sin partidos.",
         "loading": "⏳ *Cargando...*",
         "back": "🔙 Volver",
         "choose_league": "🏆 *Elige una liga :*",
         "choose_match": "⚽ *Elige un partido :*",
         "choose_market": "📊 *Elige un mercado :*",
-        "no_match_today": "⚠️ No hay partidos hoy.",
-        "no_match_week": "⚠️ No hay partidos en los próximos 7 días.",
-        "market_h2h": "🔮 1X2 (Victoria/Empate/Derrota)",
+        "no_match_today": "⚠️ Sin partidos hoy.",
+        "no_match_week": "⚠️ Sin partidos en 7 días.",
+        "market_h2h": "🔮 1X2",
         "market_spreads": "📐 Hándicap",
         "market_totals": "📈 Más/Menos",
-        "no_market": "❌ No hay mercado disponible para este partido.",
+        "no_market": "❌ Sin mercado.",
         "best_odds": "🏆 Mejores cuotas",
         "value_analysis": "💎 Análisis de valor",
-        "search_prompt": "⚽ *Búsqueda de equipo*\n\nEnvía un nombre (ej: `Arsenal`).",
-        "follow_prompt": "🔔 Envía `seguir Arsenal` para seguir un equipo.",
-        "following": "✅ Ahora sigues a *{team}*.",
+        "search_prompt": "⚽ *Búsqueda*\n\nEnvía un nombre.",
+        "follow_prompt": "🔔 Envía `seguir Arsenal`.",
+        "following": "✅ Sigues a *{team}*.",
         "following_list": "📋 *Equipos seguidos*",
         "stats_title": "📊 *Estadísticas*",
         "stats_saved": "Pronósticos:",
         "stats_correct": "Correctos:",
         "stats_rate": "Tasa:",
-        "no_data": "📊 Sin datos disponibles.",
-        "help_text": "❓ *Ayuda*\n\nUsa los botones del menú.",
-        "matches_found": "🔍 *{count} partido(s) encontrado(s)* :",
+        "no_data": "📊 Sin datos.",
+        "help_text": "❓ *Ayuda*\n\nUsa los botones.",
+        "matches_found": "🔍 *{count} partido(s)* :",
         "page": "📄 Página",
         "prev": "⬅️ Anterior",
         "next": "Siguiente ➡️",
         "prev_short": "⬅️ Ant.",
         "next_short": "Sig. ➡️",
-        "total_leagues": "📊 {count} ligas en total",
-        "no_league_matches": "ℹ️ No hay partidos para esta liga.",
+        "total_leagues": "📊 {count} ligas",
+        "no_league_matches": "ℹ️ Sin partidos.",
         "match_count": "🔮 *{count} partidos:*",
     },
     "pt": {
         "welcome": "👋 *Bem-vindo ao KING NI Predict Bot !*",
         "choose_lang": "🌐 *Escolhe o teu idioma :*",
-        "lang_set": "✅ Idioma definido para *Português*.",
+        "lang_set": "✅ Idioma: *Português*.",
         "menu_pred_today": "🔮 Prognósticos de hoje",
         "menu_week": "📅 Prognósticos da semana",
         "menu_by_league": "🏆 Por campeonato",
@@ -190,93 +191,92 @@ LANGUAGES = {
         "menu_lang": "🌐 Idioma",
         "menu_help": "❓ Ajuda",
         "menu_reset": "🔄 Reiniciar",
-        "no_matches": "⚠️ Nenhum jogo encontrado.",
+        "no_matches": "⚠️ Nenhum jogo.",
         "loading": "⏳ *A carregar...*",
         "back": "🔙 Voltar",
         "choose_league": "🏆 *Escolhe um campeonato :*",
         "choose_match": "⚽ *Escolhe um jogo :*",
         "choose_market": "📊 *Escolhe um mercado :*",
         "no_match_today": "⚠️ Sem jogos hoje.",
-        "no_match_week": "⚠️ Sem jogos nos próximos 7 dias.",
-        "market_h2h": "🔮 1X2 (Vitória/Empate/Derrota)",
+        "no_match_week": "⚠️ Sem jogos em 7 dias.",
+        "market_h2h": "🔮 1X2",
         "market_spreads": "📐 Handicap",
         "market_totals": "📈 Mais/Menos",
-        "no_market": "❌ Nenhum mercado disponível para este jogo.",
+        "no_market": "❌ Sem mercado.",
         "best_odds": "🏆 Melhores cotações",
         "value_analysis": "💎 Análise de valor",
-        "search_prompt": "⚽ *Busca de equipa*\n\nEnvia um nome (ex: `Arsenal`).",
-        "follow_prompt": "🔔 Envia `seguir Arsenal` para seguir uma equipa.",
-        "following": "✅ Agora segues *{team}*.",
+        "search_prompt": "⚽ *Busca*\n\nEnvia um nome.",
+        "follow_prompt": "🔔 Envia `seguir Arsenal`.",
+        "following": "✅ Segues *{team}*.",
         "following_list": "📋 *Equipas seguidas*",
         "stats_title": "📊 *Estatísticas*",
         "stats_saved": "Prognósticos:",
         "stats_correct": "Corretos:",
         "stats_rate": "Taxa:",
-        "no_data": "📊 Sem dados disponíveis.",
-        "help_text": "❓ *Ajuda*\n\nUsa os botões do menu.",
-        "matches_found": "🔍 *{count} jogo(s) encontrado(s)* :",
+        "no_data": "📊 Sem dados.",
+        "help_text": "❓ *Ajuda*\n\nUsa os botões.",
+        "matches_found": "🔍 *{count} jogo(s)* :",
         "page": "📄 Página",
         "prev": "⬅️ Anterior",
         "next": "Seguinte ➡️",
         "prev_short": "⬅️ Ant.",
         "next_short": "Seg. ➡️",
-        "total_leagues": "📊 {count} campeonatos no total",
-        "no_league_matches": "ℹ️ Sem jogos para este campeonato.",
+        "total_leagues": "📊 {count} campeonatos",
+        "no_league_matches": "ℹ️ Sem jogos.",
         "match_count": "🔮 *{count} jogos:*",
     },
     "ar": {
         "welcome": "👋 *مرحبا بك في KING NI Predict Bot !*",
         "choose_lang": "🌐 *اختر لغتك :*",
-        "lang_set": "✅ تم تعيين اللغة إلى *العربية*.",
+        "lang_set": "✅ اللغة: *العربية*.",
         "menu_pred_today": "🔮 توقعات اليوم",
         "menu_week": "📅 توقعات الأسبوع",
         "menu_by_league": "🏆 حسب البطولة",
         "menu_search": "⚽ البحث عن فريق",
         "menu_stats": "📊 الإحصائيات",
         "menu_follow": "🔔 متابعة فريق",
-        "menu_backtest": "📈 الاختبار الخلفي",
+        "menu_backtest": "📈 الاختبار",
         "menu_trends": "📊 اتجاهاتي",
         "menu_lang": "🌐 اللغة",
         "menu_help": "❓ مساعدة",
         "menu_reset": "🔄 إعادة تعيين",
-        "no_matches": "⚠️ لم يتم العثور على مباريات.",
+        "no_matches": "⚠️ لا مباريات.",
         "loading": "⏳ *جاري التحميل...*",
         "back": "🔙 رجوع",
         "choose_league": "🏆 *اختر بطولة :*",
         "choose_match": "⚽ *اختر مباراة :*",
         "choose_market": "📊 *اختر سوقاً :*",
-        "no_match_today": "⚠️ لا توجد مباريات اليوم.",
-        "no_match_week": "⚠️ لا توجد مباريات في الأيام السبعة القادمة.",
-        "market_h2h": "🔮 1X2 (فوز/تعادل/خسارة)",
-        "market_spreads": "📐 الهانديكاب",
+        "no_match_today": "⚠️ لا مباريات اليوم.",
+        "no_match_week": "⚠️ لا مباريات في 7 أيام.",
+        "market_h2h": "🔮 1X2",
+        "market_spreads": "📐 هانديكاب",
         "market_totals": "📈 أكثر/أقل",
-        "no_market": "❌ لا يوجد سوق متاح لهذه المباراة.",
+        "no_market": "❌ لا سوق متاح.",
         "best_odds": "🏆 أفضل الأسعار",
         "value_analysis": "💎 تحليل القيمة",
-        "search_prompt": "⚽ *البحث عن فريق*\n\nأرسل اسم فريق (مثلاً `Arsenal`).",
-        "follow_prompt": "🔔 أرسل `suivre Arsenal` لمتابعة فريق.",
-        "following": "✅ أنت تتابع الآن *{team}*.",
+        "search_prompt": "⚽ *بحث*\n\nأرسل اسماً.",
+        "follow_prompt": "🔔 أرسل `suivre Arsenal`.",
+        "following": "✅ تتابع *{team}*.",
         "following_list": "📋 *الفرق المتابعة*",
         "stats_title": "📊 *الإحصائيات*",
         "stats_saved": "التوقعات:",
         "stats_correct": "الصحيحة:",
         "stats_rate": "النسبة:",
-        "no_data": "📊 لا توجد بيانات متاحة.",
-        "help_text": "❓ *مساعدة*\n\nاستخدم أزرار القائمة.",
-        "matches_found": "🔍 *تم العثور على {count} مباراة* :",
+        "no_data": "📊 لا بيانات.",
+        "help_text": "❓ *مساعدة*\n\nاستخدم الأزرار.",
+        "matches_found": "🔍 *{count} مباراة* :",
         "page": "📄 صفحة",
         "prev": "⬅️ السابق",
         "next": "التالي ➡️",
         "prev_short": "⬅️ السابق",
         "next_short": "التالي ➡️",
-        "total_leagues": "📊 {count} بطولة في المجموع",
-        "no_league_matches": "ℹ️ لا توجد مباريات لهذه البطولة.",
+        "total_leagues": "📊 {count} بطولة",
+        "no_league_matches": "ℹ️ لا مباريات.",
         "match_count": "🔮 *{count} مباريات:*",
     }
 }
 
 def t(lang, key, **kwargs):
-    """Récupère une traduction avec interpolation."""
     text = LANGUAGES.get(lang, LANGUAGES["fr"]).get(key, key)
     if kwargs:
         try:
@@ -340,6 +340,9 @@ LEAGUES_FR = {
     "UEFA Nations League": "🇪🇺 Ligue des Nations UEFA",
 }
 
+def translate_league(name):
+    return LEAGUES_FR.get(name, name)
+
 # ------------------------------------------------------------
 # 4. CHAMPIONNATS
 # ------------------------------------------------------------
@@ -356,9 +359,6 @@ SPORTS_FALLBACK = {
     "🏆 Ligue des Champions UEFA": "soccer_uefa_champs_league",
     "🇪🇺 Ligue des Nations UEFA": "soccer_uefa_nations_league",
 }
-
-def translate_league(name):
-    return LEAGUES_FR.get(name, name)
 
 def get_all_sports(force_refresh=False):
     global _SPORTS_CACHE, _SPORTS_CACHE_TIME
@@ -413,7 +413,7 @@ def generate_progress_bar(value, total=100, length=10):
     return "█" * filled + "░" * (length - filled)
 
 def is_match_upcoming(match, tolerance_minutes=20):
-    """Filtre les matchs commencés il y a plus de X minutes."""
+    """Garde les matchs qui n'ont pas commencé il y a plus de 20 min."""
     try:
         commence = match.get("commence_time", "")
         if not commence:
@@ -508,20 +508,20 @@ def get_stats(user_id, lang):
 # ------------------------------------------------------------
 # 7. API THE ODDS
 # ------------------------------------------------------------
-def odds_request(endpoint, params=None, retries=3):
+def odds_request(endpoint, params=None, retries=2):
     if params is None:
         params = {}
     params["apiKey"] = ODDS_API_KEY
     url = f"{ODDS_URL}{endpoint}"
     for attempt in range(retries):
         try:
-            r = requests.get(url, params=params, timeout=15)
+            r = requests.get(url, params=params, timeout=10)
             if r.status_code == 200:
                 return r.json()
         except Exception as e:
             print(f"⚠️ {endpoint}: {e}")
         if attempt < retries - 1:
-            time.sleep(2)
+            time.sleep(1)
     return None
 
 def get_matches_for_league(sport_key, markets="h2h,spreads,totals"):
@@ -546,69 +546,81 @@ def get_matches_for_league(sport_key, markets="h2h,spreads,totals"):
     matches.sort(key=lambda x: x.get("commence_time", ""))
     return matches, None
 
-def get_matches_today():
+# ---------- NOUVEAU : requêtes parallèles ----------
+def get_matches_for_multiple_leagues(sports_dict, max_workers=10):
+    """Interroge plusieurs championnats EN PARALLÈLE pour aller plus vite."""
     all_matches = []
-    today = datetime.now().date()
-    for nom, cle in get_sports().items():
-        matches, error = get_matches_for_league(cle)
-        if error or not matches:
-            continue
-        for m in matches:
+    
+    def fetch(item):
+        nom, cle = item
+        try:
+            matches, error = get_matches_for_league(cle)
+            if error or not matches:
+                return []
+            for m in matches:
+                m["league_name"] = nom
+            return matches
+        except:
+            return []
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(fetch, item) for item in sports_dict.items()]
+        for future in as_completed(futures):
             try:
-                md = datetime.strptime(m.get("commence_time","")[:10], "%Y-%m-%d").date()
-                if md == today:
-                    m["league_name"] = nom
-                    all_matches.append(m)
+                result = future.result(timeout=20)
+                all_matches.extend(result)
             except:
                 continue
+    
     all_matches.sort(key=lambda x: x.get("commence_time", ""))
     return all_matches
+
+def get_matches_today():
+    today = datetime.now().date()
+    all_matches = get_matches_for_multiple_leagues(get_sports())
+    filtered = []
+    for m in all_matches:
+        try:
+            md = datetime.strptime(m.get("commence_time","")[:10], "%Y-%m-%d").date()
+            if md == today:
+                filtered.append(m)
+        except:
+            continue
+    return filtered
 
 def get_matches_week():
-    all_matches = []
     today = datetime.now().date()
     limit = today + timedelta(days=7)
-    for nom, cle in get_sports().items():
-        matches, error = get_matches_for_league(cle)
-        if error or not matches:
+    all_matches = get_matches_for_multiple_leagues(get_sports())
+    filtered = []
+    for m in all_matches:
+        try:
+            md = datetime.strptime(m.get("commence_time","")[:10], "%Y-%m-%d").date()
+            if today <= md <= limit:
+                filtered.append(m)
+        except:
             continue
-        for m in matches:
-            try:
-                md = datetime.strptime(m.get("commence_time","")[:10], "%Y-%m-%d").date()
-                if today <= md <= limit:
-                    m["league_name"] = nom
-                    all_matches.append(m)
-            except:
-                continue
-    all_matches.sort(key=lambda x: x.get("commence_time", ""))
-    return all_matches
+    return filtered
 
 def get_all_matches(days_ahead=None):
-    all_matches = []
+    all_matches = get_matches_for_multiple_leagues(get_sports())
+    if days_ahead is None:
+        return all_matches
     today = datetime.now().date()
-    for nom, cle in get_sports().items():
-        matches, error = get_matches_for_league(cle)
-        if error or not matches:
+    filtered = []
+    for m in all_matches:
+        try:
+            md = datetime.strptime(m.get("commence_time","")[:10], "%Y-%m-%d").date()
+            if today <= md <= today + timedelta(days=days_ahead):
+                filtered.append(m)
+        except:
             continue
-        for m in matches:
-            m["league_name"] = nom
-            if days_ahead is None:
-                all_matches.append(m)
-            else:
-                try:
-                    md = datetime.strptime(m.get("commence_time","")[:10], "%Y-%m-%d").date()
-                    if today <= md <= today + timedelta(days=days_ahead):
-                        all_matches.append(m)
-                except:
-                    continue
-    all_matches.sort(key=lambda x: x.get("commence_time", ""))
-    return all_matches
+    return filtered
 
 # ------------------------------------------------------------
 # 8. MARCHÉS
 # ------------------------------------------------------------
 def get_available_markets(match):
-    """Retourne la liste des marchés disponibles pour un match."""
     markets = set()
     for bm in match.get('bookmakers', []):
         for market in bm.get('markets', []):
@@ -644,19 +656,14 @@ def get_market_predictions(match, market_type="h2h"):
                         pred = "🤝 Nul"
                     return {"type": "1X2", "prob_home": ph, "prob_draw": pd, "prob_away": pa,
                             "prediction": pred,
-                            "display": f"🏠 {home} : {ph:.1f}% {generate_progress_bar(ph)}\n🤝 Nul : {pd:.1f}% {generate_progress_bar(pd)}\n✈️ {away} : {pa:.1f}% {generate_progress_bar(pa)}",
-                            "odds": {"home": oh, "draw": od, "away": oa}}
+                            "display": f"🏠 {home} : {ph:.1f}% {generate_progress_bar(ph)}\n🤝 Nul : {pd:.1f}% {generate_progress_bar(pd)}\n✈️ {away} : {pa:.1f}% {generate_progress_bar(pa)}"}
                 
                 elif market_type == "spreads":
                     lines = []
                     for o in outcomes:
                         if o.get('price', 0) > 0:
-                            lines.append({
-                                "name": o["name"],
-                                "point": o.get("point", ""),
-                                "price": o["price"],
-                                "prob": (1/o["price"])*100
-                            })
+                            lines.append({"name": o["name"], "point": o.get("point", ""), "price": o["price"],
+                                          "prob": (1/o["price"])*100})
                     if not lines:
                         continue
                     best = max(lines, key=lambda x: x["prob"])
@@ -668,12 +675,8 @@ def get_market_predictions(match, market_type="h2h"):
                     lines = []
                     for o in outcomes:
                         if o.get('price', 0) > 0 and o.get('point'):
-                            lines.append({
-                                "name": o["name"],
-                                "point": o["point"],
-                                "price": o["price"],
-                                "prob": (1/o["price"])*100
-                            })
+                            lines.append({"name": o["name"], "point": o["point"], "price": o["price"],
+                                          "prob": (1/o["price"])*100})
                     if not lines:
                         continue
                     best = max(lines, key=lambda x: x["prob"])
@@ -825,17 +828,12 @@ bot.match_cache = {}
 bot.current_matches_list = []
 bot.current_match_data = {}
 
-def send_main_menu(message, lang):
-    bot.reply_to(message, t(lang, "welcome") + "\n\n" + t(lang, "choose_lang").replace("Choisis ta langue :", "").replace("Choose your language :", "").strip() or "👇",
-                 parse_mode="Markdown", reply_markup=menu_options(lang))
-
 def send_welcome(message, lang):
     bot.reply_to(message, f"{t(lang, 'welcome')}\n\n👇", parse_mode="Markdown", reply_markup=menu_options(lang))
 
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     user_id = message.from_user.id
-    # Enregistrer l'utilisateur s'il n'existe pas
     conn = sqlite3.connect('predictions.db')
     cur = conn.cursor()
     cur.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
@@ -843,12 +841,10 @@ def handle_start(message):
     conn.close()
     
     if not exists:
-        # Nouvel utilisateur → demander la langue
         register_user(user_id, message.chat.id, message.from_user.username, None)
         bot.reply_to(message, t("fr", "welcome") + "\n\n" + t("fr", "choose_lang"),
                      parse_mode="Markdown", reply_markup=menu_lang_inline())
     else:
-        # Utilisateur existant → afficher le menu
         lang = get_user_lang(user_id) or "fr"
         register_user(user_id, message.chat.id, message.from_user.username, lang)
         bot.match_cache = {}
@@ -873,17 +869,12 @@ def handle_callback(call):
         user_id = call.from_user.id
         lang = get_user_lang(user_id) or "fr"
 
-        # --- SÉLECTION DE LA LANGUE ---
         if call.data.startswith("setlang_"):
             new_lang = call.data.replace("setlang_", "")
             set_user_lang(user_id, new_lang)
             lang = new_lang
-            # Recharger la base si l'utilisateur n'existait pas
             register_user(user_id, chat_id, call.from_user.username, new_lang)
-            bot.edit_message_text(
-                t(lang, "lang_set"),
-                chat_id, call.message.message_id, parse_mode="Markdown"
-            )
+            bot.edit_message_text(t(lang, "lang_set"), chat_id, call.message.message_id, parse_mode="Markdown")
             bot.send_message(chat_id, f"{t(lang, 'welcome')}\n\n👇",
                              parse_mode="Markdown", reply_markup=menu_options(lang))
             return
@@ -998,7 +989,6 @@ def handle_callback(call):
             if "error" in pred:
                 bot.send_message(chat_id, t(lang, "no_market"))
                 return
-            # Sauvegarde
             save_prediction(match['home_team'], match['away_team'], pred.get('type', market_type),
                             pred.get('prob_home', 0), pred.get('prob_draw', 0), pred.get('prob_away', 0),
                             pred['prediction'], user_id)
@@ -1040,23 +1030,24 @@ def handle_text(message):
     if text.startswith('/'):
         return
 
-    # --- RESET ---
     if text == t(lang, "menu_reset"):
         bot.match_cache = {}
         bot.current_matches_list = []
         send_welcome(message, lang)
         return
 
-    # --- LANGUE ---
     if text == t(lang, "menu_lang"):
         bot.reply_to(message, t(lang, "choose_lang"),
                      parse_mode="Markdown", reply_markup=menu_lang_inline())
         return
 
-    # --- PRONOSTICS DU JOUR ---
     if text == t(lang, "menu_pred_today"):
         loading = bot.reply_to(message, t(lang, "loading"), parse_mode="Markdown")
-        all_matches = get_matches_today()
+        try:
+            all_matches = get_matches_today()
+        except Exception as e:
+            print(f"Erreur: {e}")
+            all_matches = []
         if not all_matches:
             bot.edit_message_text(t(lang, "no_match_today"), chat_id, loading.message_id)
             return
@@ -1069,10 +1060,13 @@ def handle_text(message):
                          reply_markup=menu_matchs_list(bot.current_matches_list, "match_day", lang, 0))
         return
 
-    # --- PRONOSTICS DE LA SEMAINE ---
     if text == t(lang, "menu_week"):
         loading = bot.reply_to(message, t(lang, "loading"), parse_mode="Markdown")
-        all_matches = get_matches_week()
+        try:
+            all_matches = get_matches_week()
+        except Exception as e:
+            print(f"Erreur: {e}")
+            all_matches = []
         if not all_matches:
             bot.edit_message_text(t(lang, "no_match_week"), chat_id, loading.message_id)
             return
@@ -1085,25 +1079,21 @@ def handle_text(message):
                          reply_markup=menu_matchs_list(bot.current_matches_list, "match_day", lang, 0))
         return
 
-    # --- PAR CHAMPIONNAT ---
     if text == t(lang, "menu_by_league"):
         sports = get_sports()
         bot.reply_to(message, f"🏆 *{len(sports)}*\n\n{t(lang, 'choose_league')}",
                      parse_mode="Markdown", reply_markup=menu_ligues_inline(lang, 0))
         return
 
-    # --- RECHERCHE ---
     if text == t(lang, "menu_search"):
         bot.reply_to(message, t(lang, "search_prompt"),
                      parse_mode="Markdown", reply_markup=menu_options(lang))
         return
 
-    # --- STATS ---
     if text == t(lang, "menu_stats") or text == t(lang, "menu_backtest"):
         bot.reply_to(message, get_stats(user_id, lang), parse_mode="Markdown", reply_markup=menu_options(lang))
         return
 
-    # --- TENDANCES ---
     if text == t(lang, "menu_trends"):
         followed = get_followed_teams(user_id)
         if not followed:
@@ -1113,7 +1103,6 @@ def handle_text(message):
         bot.reply_to(message, texte, parse_mode="Markdown", reply_markup=menu_options(lang))
         return
 
-    # --- SUIVRE UNE ÉQUIPE ---
     if text == t(lang, "menu_follow"):
         followed = get_followed_teams(user_id)
         if followed:
@@ -1124,13 +1113,11 @@ def handle_text(message):
             bot.reply_to(message, t(lang, "follow_prompt"), parse_mode="Markdown")
         return
 
-    # --- AIDE ---
     if text == t(lang, "menu_help"):
         bot.reply_to(message, t(lang, "help_text"), parse_mode="Markdown", reply_markup=menu_options(lang))
         return
 
-    # --- SUIVRE ÉQUIPE (texte) ---
-    if text.lower().startswith("suivre ") or text.lower().startswith("follow ") or text.lower().startswith("seguir ") or text.lower().startswith("seguir "):
+    if text.lower().startswith(("suivre ", "follow ", "seguir ")):
         parts = text.split(" ", 1)
         if len(parts) > 1:
             team = parts[1].strip()
@@ -1139,9 +1126,12 @@ def handle_text(message):
                          parse_mode="Markdown", reply_markup=menu_options(lang))
             return
 
-    # --- RECHERCHE LIBRE ---
+    # Recherche libre
     loading = bot.reply_to(message, t(lang, "loading"), parse_mode="Markdown")
-    matches = get_all_matches(days_ahead=None)
+    try:
+        matches = get_all_matches(days_ahead=None)
+    except:
+        matches = []
     found = [m for m in matches if text.lower() in m['home_team'].lower() or text.lower() in m['away_team'].lower()]
     if not found:
         bot.edit_message_text(f"❌ {text}", chat_id, loading.message_id)
@@ -1184,6 +1174,6 @@ if __name__ == "__main__":
     sports = get_sports()
     print(f"✅ {len(sports)} championnats chargés.")
     print("⏱️ Filtre : masque les matchs commencés il y a plus de 20 minutes.")
-    print("🌐 Langues disponibles : fr, en, es, pt, ar")
+    print("⚡ Parallélisation : 10 requêtes simultanées")
     print("✅ Bot démarré.")
     bot.infinity_polling()
