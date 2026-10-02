@@ -105,54 +105,70 @@ def translate_advice(advice, lang):
     """Traduit les conseils API-Football en langue cible."""
     if not advice:
         return advice
-    translations = {
+    # 1. D'abord les expressions complètes (avant les mots isolés)
+    full_phrases = {
         "fr": {
+            "Win or draw": "Victoire ou Nul",
             "Combo Double chance": "Combo Double chance",
             "Double chance": "Double chance",
-            " and ": " et ",
-            "goals": "buts",
-            "goal": "but",
             "Winner:": "Vainqueur :",
-            "draw": "nul",
-            " or ": " ou ",
         },
         "es": {
+            "Win or draw": "Victoria o Empate",
             "Combo Double chance": "Combo Doble oportunidad",
             "Double chance": "Doble oportunidad",
-            " and ": " y ",
-            "goals": "goles",
-            "goal": "gol",
             "Winner:": "Ganador:",
-            "draw": "empate",
-            " or ": " o ",
         },
         "pt": {
+            "Win or draw": "Vitória ou Empate",
             "Combo Double chance": "Combo Dupla chance",
             "Double chance": "Dupla chance",
-            " and ": " e ",
-            "goals": "golos",
-            "goal": "golo",
             "Winner:": "Vencedor:",
-            "draw": "empate",
-            " or ": " ou ",
         },
         "ar": {
+            "Win or draw": "فوز أو تعادل",
             "Combo Double chance": "فرصة مزدوجة مركبة",
             "Double chance": "فرصة مزدوجة",
-            " and ": " و ",
-            "goals": "أهداف",
-            "goal": "هدف",
             "Winner:": "الفائز:",
-            "draw": "تعادل",
-            " or ": " أو ",
         },
         "en": {},
     }
-    t_dict = translations.get(lang, {})
+    # 2. Puis les mots isolés
+    single_words = {
+        "fr": {
+            " and ": " et ", "goals": "buts", "goal": "but",
+            "draw": "nul", " or ": " ou ",
+        },
+        "es": {
+            " and ": " y ", "goals": "goles", "goal": "gol",
+            "draw": "empate", " or ": " o ",
+        },
+        "pt": {
+            " and ": " e ", "goals": "golos", "goal": "golo",
+            "draw": "empate", " or ": " ou ",
+        },
+        "ar": {
+            " and ": " و ", "goals": "أهداف", "goal": "هدف",
+            "draw": "تعادل", " or ": " أو ",
+        },
+        "en": {},
+    }
     result = advice
-    for en_term, translated in t_dict.items():
+    for en_term, translated in full_phrases.get(lang, {}).items():
+        result = result.replace(en_term, translated)
+    for en_term, translated in single_words.get(lang, {}).items():
         result = result.replace(en_term, translated)
     return result
+
+def is_valid_uo(value):
+    """Vérifie si la valeur Under/Over est valide (positive)."""
+    if not value or value == "N/A":
+        return False
+    try:
+        v = float(str(value).replace("+", "").strip())
+        return v > 0
+    except:
+        return False
 
 # ------------------------------------------------------------
 # 4. LANGUES
@@ -555,7 +571,7 @@ def get_all_markets_text(fixture, lang="fr"):
         if wod is not None:
             txt += f"🎯 *{at(lang, 'win_or_draw')}* : {at(lang, 'yes') if wod else at(lang, 'no')}\n\n"
         uo = predictions.get("under_over")
-        if uo and uo != "N/A":
+        if is_valid_uo(uo):
             txt += f"📈 *{at(lang, 'under_over')}* : {uo}\n\n"
         goals = predictions.get("goals", {})
         gh = parse_score_value(goals.get("home"))
@@ -618,11 +634,14 @@ def get_market_text(fixture, market_type, lang="fr"):
             uo = predictions.get("under_over", "N/A")
             goals = predictions.get("goals", {})
             txt = f"📈 *{at(lang, 'under_over')}*\n\n"
-            txt += f"🎯 {at(lang, 'advice')} : *{uo}*\n\n"
+            if is_valid_uo(uo):
+                txt += f"🎯 {at(lang, 'advice')} : *{uo}*\n\n"
+            else:
+                txt += f"⚠️ {at(lang, 'not_available')}\n\n"
             txt += f"⚽ {at(lang, 'goals')} :\n"
             txt += f"🏠 {home} : {goals.get('home','?')}\n"
             txt += f"✈️ {away} : {goals.get('away','?')}\n"
-            return txt, {"prediction": uo}
+            return txt, {"prediction": uo if is_valid_uo(uo) else "N/A"}
         elif market_type == "score":
             goals = predictions.get("goals", {})
             gh = parse_score_value(goals.get("home"))
@@ -1011,6 +1030,6 @@ threading.Thread(target=run_http, daemon=True).start()
 if __name__ == "__main__":
     init_db()
     print("✅ Base de données initialisée.")
-    print("⚽ API-Football - Traduction complète des conseils")
+    print("⚽ API-Football - Traduction complète + filtre U/O négatif")
     print("✅ Bot démarré.")
     bot.infinity_polling()
