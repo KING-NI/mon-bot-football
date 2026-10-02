@@ -17,19 +17,99 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID = os.getenv("CHAT_ID", "")
 
 # ------------------------------------------------------------
-# 2. CHAMPIONNATS (récupération dynamique depuis The Odds API)
+# 2. TRADUCTION DES LIGUES EN FRANÇAIS
+# ------------------------------------------------------------
+LEAGUES_FR = {
+    # Angleterre
+    "EPL": "Premier League - Angleterre",
+    "Premier League": "Premier League - Angleterre",
+    "Championship": "Championnat - Angleterre (D2)",
+    "EFL Cup": "Coupe de la Ligue anglaise",
+    "League 1": "League One - Angleterre (D3)",
+    "League 2": "League Two - Angleterre (D4)",
+    # France
+    "Ligue 1 - France": "Ligue 1 - France",
+    "Ligue 2 - France": "Ligue 2 - France",
+    # Allemagne
+    "Bundesliga - Germany": "Bundesliga - Allemagne",
+    "Bundesliga 2 - Germany": "Bundesliga 2 - Allemagne",
+    "3. Liga - Germany": "3. Liga - Allemagne",
+    "DFB-Pokal": "Coupe d'Allemagne",
+    "Frauen-Bundesliga": "Bundesliga féminine - Allemagne",
+    # Espagne
+    "La Liga - Spain": "Liga - Espagne",
+    "La Liga 2 - Spain": "Liga 2 - Espagne",
+    # Italie
+    "Serie A - Italy": "Serie A - Italie",
+    "Serie B - Italy": "Serie B - Italie",
+    # Portugal
+    "Primeira Liga - Portugal": "Liga Portugal",
+    # Pays-Bas
+    "Dutch Eredivisie": "Eredivisie - Pays-Bas",
+    # Belgique
+    "Belgium First Div": "Pro League - Belgique",
+    # Écosse
+    "Premiership - Scotland": "Premiership - Écosse",
+    # Suisse
+    "Swiss Superleague": "Super League - Suisse",
+    # Autriche
+    "Austrian Football Bundesliga": "Bundesliga - Autriche",
+    # Turquie
+    "Turkey Super League": "Süper Lig - Turquie",
+    # Grèce
+    "Super League - Greece": "Super League - Grèce",
+    # Russie
+    "Premier League - Russia": "Premier League - Russie",
+    # Scandinavie
+    "Eliteserien - Norway": "Eliteserien - Norvège",
+    "Allsvenskan - Sweden": "Allsvenskan - Suède",
+    "Superettan - Sweden": "Superettan - Suède",
+    "Veikkausliiga - Finland": "Veikkausliiga - Finlande",
+    "Denmark Superliga": "Superliga - Danemark",
+    # Pologne
+    "Ekstraklasa - Poland": "Ekstraklasa - Pologne",
+    # Irlande
+    "League of Ireland": "Championnat d'Irlande",
+    # Amérique
+    "MLS": "MLS - États-Unis",
+    "Liga MX": "Liga MX - Mexique",
+    "Brazil Série A": "Brasileirão Série A",
+    "Brazil Série B": "Brasileirão Série B",
+    "Primera División - Argentina": "Primera División - Argentine",
+    "Primera División - Chile": "Primera División - Chili",
+    "Copa Libertadores": "Copa Libertadores",
+    "Copa Sudamericana": "Copa Sudamericana",
+    # Asie
+    "J League": "J-League - Japon",
+    "K League 1": "K-League 1 - Corée",
+    "A-League": "A-League - Australie",
+    # Compétitions UEFA
+    "UEFA Champions League": "🏆 Ligue des Champions UEFA",
+    "UEFA Europa League": "🏆 Ligue Europa UEFA",
+    "UEFA Europa Conference Leag…": "🏆 Ligue Europa Conference UEFA",
+    "UEFA Europa Conference League": "🏆 Ligue Europa Conference UEFA",
+    "UEFA Nations League": "🇪🇺 Ligue des Nations UEFA",
+}
+
+def translate_league(name):
+    """Traduit un nom de ligue en français si disponible."""
+    return LEAGUES_FR.get(name, name)
+
+# ------------------------------------------------------------
+# 3. CHAMPIONNATS (récupération dynamique)
 # ------------------------------------------------------------
 _SPORTS_CACHE = None
 _SPORTS_CACHE_TIME = None
 
 SPORTS_FALLBACK = {
-    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": "soccer_epl",
-    "🇫🇷 Ligue 1": "soccer_france_ligue_one",
-    "🇩🇪 Bundesliga": "soccer_germany_bundesliga",
-    "🇪🇸 La Liga": "soccer_spain_la_liga",
-    "🇮🇹 Serie A": "soccer_italy_serie_a",
-    "🇺🇸 MLS": "soccer_usa_mls",
-    "🏆 Champions League": "soccer_uefa_champs_league",
+    "⚽ Premier League - Angleterre": "soccer_epl",
+    "⚽ Ligue 1 - France": "soccer_france_ligue_one",
+    "⚽ Bundesliga - Allemagne": "soccer_germany_bundesliga",
+    "⚽ Liga - Espagne": "soccer_spain_la_liga",
+    "⚽ Serie A - Italie": "soccer_italy_serie_a",
+    "⚽ MLS - États-Unis": "soccer_usa_mls",
+    "🏆 Ligue des Champions UEFA": "soccer_uefa_champs_league",
+    "🇪🇺 Ligue des Nations UEFA": "soccer_uefa_nations_league",
 }
 
 def get_all_sports(force_refresh=False):
@@ -52,11 +132,12 @@ def get_all_sports(force_refresh=False):
                 if sport.get("group") == "Soccer" and sport.get("active"):
                     key = sport["key"]
                     title = sport["title"]
-                    display_name = f"⚽ {title}"
+                    title_fr = translate_league(title)
+                    display_name = f"⚽ {title_fr}"
                     soccer_leagues[display_name] = key
             
             if soccer_leagues:
-                print(f"✅ {len(soccer_leagues)} championnats récupérés depuis The Odds API")
+                print(f"✅ {len(soccer_leagues)} championnats récupérés (traduits)")
                 _SPORTS_CACHE = soccer_leagues
                 _SPORTS_CACHE_TIME = datetime.now()
                 return soccer_leagues
@@ -72,10 +153,9 @@ def get_sports():
     return _SPORTS_CACHE
 
 # ------------------------------------------------------------
-# 3. UTILITAIRES (dates et heures)
+# 4. UTILITAIRES (dates et heures)
 # ------------------------------------------------------------
 def format_date(iso_date):
-    """Convertit 2026-10-10T15:30:00Z en 10/10/2026."""
     if not iso_date:
         return "?"
     try:
@@ -84,7 +164,6 @@ def format_date(iso_date):
         return iso_date[:10] if len(iso_date) >= 10 else "?"
 
 def format_datetime(iso_date):
-    """Convertit 2026-10-10T15:30:00Z en 10/10/2026 à 15h30."""
     if not iso_date:
         return "?"
     try:
@@ -98,7 +177,7 @@ def generate_progress_bar(value, total=100, length=10):
     return "█" * filled + "░" * (length - filled)
 
 # ------------------------------------------------------------
-# 4. TRADUCTIONS
+# 5. TRADUCTIONS INTERFACE
 # ------------------------------------------------------------
 LANGUAGES = {
     "fr": {
@@ -148,7 +227,7 @@ def detect_language(message):
     return lang
 
 # ------------------------------------------------------------
-# 5. BASE DE DONNÉES
+# 6. BASE DE DONNÉES
 # ------------------------------------------------------------
 def init_db():
     conn = sqlite3.connect('predictions.db')
@@ -167,7 +246,7 @@ def init_db():
     conn.close()
 
 # ------------------------------------------------------------
-# 6. API THE ODDS
+# 7. API THE ODDS
 # ------------------------------------------------------------
 def odds_request(endpoint, params=None, retries=3):
     if params is None:
@@ -229,7 +308,7 @@ def get_all_matches(days_ahead=None):
     return all_matches
 
 # ------------------------------------------------------------
-# 7. MARCHÉS ET PRONOSTICS
+# 8. MARCHÉS ET PRONOSTICS
 # ------------------------------------------------------------
 def get_market_predictions(match, market_type="h2h"):
     try:
@@ -309,7 +388,7 @@ def analyze_value(match):
     return texte
 
 # ------------------------------------------------------------
-# 8. LOGO (TheSportsDB)
+# 9. LOGO (TheSportsDB)
 # ------------------------------------------------------------
 _logo_cache = {}
 def get_team_logo(team_name):
@@ -330,7 +409,7 @@ def get_team_logo(team_name):
     return None
 
 # ------------------------------------------------------------
-# 9. BASE UTILISATEURS
+# 10. BASE UTILISATEURS
 # ------------------------------------------------------------
 def register_user(user_id, chat_id, username, lang="fr"):
     conn = sqlite3.connect('predictions.db')
@@ -360,12 +439,6 @@ def get_followed_teams(user_id):
     rows = cur.fetchall(); conn.close()
     return rows
 
-def remove_followed_team(user_id, team_name):
-    conn = sqlite3.connect('predictions.db')
-    cur = conn.cursor()
-    cur.execute('DELETE FROM followed_teams WHERE user_id = ? AND team_name = ?', (user_id, team_name))
-    conn.commit(); conn.close()
-
 def save_prediction(home, away, market, ph, pd, pa, pred, user_id=None):
     conn = sqlite3.connect('predictions.db')
     cur = conn.cursor()
@@ -387,7 +460,7 @@ def get_stats(user_id=None):
     return "📊 Aucune donnée disponible."
 
 # ------------------------------------------------------------
-# 10. NOTIFICATIONS
+# 11. NOTIFICATIONS
 # ------------------------------------------------------------
 def send_notifications():
     conn = sqlite3.connect('predictions.db')
@@ -442,7 +515,7 @@ def run_scheduler():
         time.sleep(60)
 
 # ------------------------------------------------------------
-# 11. MENUS
+# 12. MENUS
 # ------------------------------------------------------------
 def menu_options(lang="fr"):
     texts = LANGUAGES.get(lang, LANGUAGES["fr"])
@@ -524,7 +597,7 @@ def menu_matchs_inline_list(sport_key, matches, lang="fr"):
     return markup
 
 # ------------------------------------------------------------
-# 12. BOT TELEGRAM
+# 13. BOT TELEGRAM
 # ------------------------------------------------------------
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 bot.match_cache = {}
@@ -828,7 +901,7 @@ def handle_text(message):
     bot.edit_message_text(texte, chat_id, loading.message_id, parse_mode="Markdown", reply_markup=menu_options(lang))
 
 # ------------------------------------------------------------
-# 13. SERVEUR HTTP POUR RENDER
+# 14. SERVEUR HTTP POUR RENDER
 # ------------------------------------------------------------
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -844,13 +917,13 @@ def run_http():
 threading.Thread(target=run_http, daemon=True).start()
 
 # ------------------------------------------------------------
-# 14. LANCEMENT
+# 15. LANCEMENT
 # ------------------------------------------------------------
 if __name__ == "__main__":
     init_db()
     print("✅ Base de données initialisée.")
     sports = get_sports()
-    print(f"✅ {len(sports)} championnats chargés.")
+    print(f"✅ {len(sports)} championnats chargés (traduits en français).")
     threading.Thread(target=run_scheduler, daemon=True).start()
     print("⏰ Notifications programmées (toutes les heures).")
     print("✅ Bot démarré.")
