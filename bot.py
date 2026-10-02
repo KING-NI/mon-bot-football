@@ -2,23 +2,17 @@ import os
 import requests
 import telebot
 import sqlite3
-import schedule
 import time
 import threading
 from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 # ------------------------------------------------------------
 # 1. CONFIGURATION
 # ------------------------------------------------------------
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
-RAPIDAPI_HOST = "therundown-therundown-v1.p.rapidapi.com"
-API_BASE_URL = f"https://{RAPIDAPI_HOST}"
-FOOTBALL_SPORT_ID = 3
-
+API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "")
+API_BASE_URL = "https://v3.football.api-sports.io"
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-CHAT_ID = os.getenv("CHAT_ID", "")
 
 # ------------------------------------------------------------
 # 2. LANGUES
@@ -35,99 +29,79 @@ LANGUAGES = {
     "fr": {
         "welcome": "👋 *Bienvenue sur KING NI Predict Bot !*",
         "choose_lang": "🌐 *Choisis ta langue :*",
-        "lang_set": "✅ Langue définie sur *Français*.",
+        "lang_set": "✅ Langue : *Français*.",
         "menu_pred_today": "🔮 Pronostics du jour",
         "menu_week": "📅 Pronostics de la semaine",
-        "menu_by_league": "🏆 Par championnat",
         "menu_search": "⚽ Rechercher une équipe",
         "menu_stats": "📊 Statistiques",
         "menu_follow": "🔔 Suivre une équipe",
-        "menu_backtest": "📈 Backtesting",
         "menu_trends": "📊 Mes tendances",
         "menu_lang": "🌐 Langue",
         "menu_help": "❓ Aide",
         "menu_reset": "🔄 Réinitialiser",
-        "no_matches": "⚠️ Aucun match trouvé.",
         "loading": "⏳ *Récupération...*",
         "back": "🔙 Retour",
-        "choose_league": "🏆 *Choisis un championnat :*",
         "choose_match": "⚽ *Choisis un match :*",
         "choose_market": "📊 *Choisis un marché :*",
         "no_match_today": "⚠️ Aucun match aujourd'hui.",
         "no_match_week": "⚠️ Aucun match dans les 7 prochains jours.",
-        "market_h2h": "🔮 1X2",
-        "market_spreads": "📐 Handicap",
-        "market_totals": "📈 Over/Under",
+        "m_1x2": "🔮 1X2 + Probabilités",
+        "m_ou": "📈 Over/Under",
+        "m_score": "⚽ Score exact prévu",
+        "m_advice": "💡 Conseil API",
+        "m_compare": "📊 Comparaison stats",
+        "m_all": "📚 Tous les marchés",
         "no_market": "❌ Aucun marché disponible.",
-        "best_odds": "🏆 Meilleures cotes",
-        "value_analysis": "💎 Analyse de valeur",
         "search_prompt": "⚽ *Recherche*\n\nEnvoie un nom (ex: `Arsenal`).",
         "follow_prompt": "🔔 Envoie `suivre Arsenal`.",
         "following": "✅ Tu suis *{team}*.",
         "following_list": "📋 *Équipes suivies*",
         "stats_title": "📊 *Statistiques*",
-        "stats_saved": "Pronostics :",
-        "stats_correct": "Justes :",
-        "stats_rate": "Taux :",
         "no_data": "📊 Aucune donnée.",
         "help_text": "❓ *Aide*\n\nUtilise les boutons.",
         "matches_found": "🔍 *{count} match(s)* :",
         "page": "📄 Page",
         "prev": "⬅️ Précédent",
         "next": "Suivant ➡️",
-        "prev_short": "⬅️ Préc.",
-        "next_short": "Suiv. ➡️",
-        "total_leagues": "📊 {count} ligues",
-        "no_league_matches": "ℹ️ Aucun match pour ce championnat.",
         "match_count": "🔮 *{count} matchs :*",
     },
     "en": {
         "welcome": "👋 *Welcome to KING NI Predict Bot !*",
         "choose_lang": "🌐 *Choose your language :*",
-        "lang_set": "✅ Language set to *English*.",
+        "lang_set": "✅ Language: *English*.",
         "menu_pred_today": "🔮 Today's predictions",
         "menu_week": "📅 Week's predictions",
-        "menu_by_league": "🏆 By league",
         "menu_search": "⚽ Search team",
         "menu_stats": "📊 Statistics",
         "menu_follow": "🔔 Follow a team",
-        "menu_backtest": "📈 Backtesting",
         "menu_trends": "📊 My trends",
         "menu_lang": "🌐 Language",
         "menu_help": "❓ Help",
         "menu_reset": "🔄 Reset",
-        "no_matches": "⚠️ No matches found.",
         "loading": "⏳ *Loading...*",
         "back": "🔙 Back",
-        "choose_league": "🏆 *Choose a league :*",
         "choose_match": "⚽ *Choose a match :*",
         "choose_market": "📊 *Choose a market :*",
         "no_match_today": "⚠️ No matches today.",
         "no_match_week": "⚠️ No matches in the next 7 days.",
-        "market_h2h": "🔮 1X2",
-        "market_spreads": "📐 Handicap",
-        "market_totals": "📈 Over/Under",
+        "m_1x2": "🔮 1X2 + Odds",
+        "m_ou": "📈 Over/Under",
+        "m_score": "⚽ Predicted score",
+        "m_advice": "💡 API Advice",
+        "m_compare": "📊 Stats comparison",
+        "m_all": "📚 All markets",
         "no_market": "❌ No market available.",
-        "best_odds": "🏆 Best odds",
-        "value_analysis": "💎 Value analysis",
         "search_prompt": "⚽ *Search*\n\nSend a name (e.g. `Arsenal`).",
         "follow_prompt": "🔔 Send `follow Arsenal`.",
         "following": "✅ You follow *{team}*.",
         "following_list": "📋 *Followed teams*",
         "stats_title": "📊 *Statistics*",
-        "stats_saved": "Predictions:",
-        "stats_correct": "Correct:",
-        "stats_rate": "Rate:",
         "no_data": "📊 No data.",
         "help_text": "❓ *Help*\n\nUse the buttons.",
         "matches_found": "🔍 *{count} match(es)* :",
         "page": "📄 Page",
         "prev": "⬅️ Previous",
         "next": "Next ➡️",
-        "prev_short": "⬅️ Prev",
-        "next_short": "Next ➡️",
-        "total_leagues": "📊 {count} leagues",
-        "no_league_matches": "ℹ️ No matches for this league.",
         "match_count": "🔮 *{count} matches:*",
     },
     "es": {
@@ -136,47 +110,37 @@ LANGUAGES = {
         "lang_set": "✅ Idioma: *Español*.",
         "menu_pred_today": "🔮 Pronósticos de hoy",
         "menu_week": "📅 Pronósticos de la semana",
-        "menu_by_league": "🏆 Por liga",
         "menu_search": "⚽ Buscar equipo",
         "menu_stats": "📊 Estadísticas",
         "menu_follow": "🔔 Seguir un equipo",
-        "menu_backtest": "📈 Backtesting",
         "menu_trends": "📊 Mis tendencias",
         "menu_lang": "🌐 Idioma",
         "menu_help": "❓ Ayuda",
         "menu_reset": "🔄 Reiniciar",
-        "no_matches": "⚠️ Sin partidos.",
         "loading": "⏳ *Cargando...*",
         "back": "🔙 Volver",
-        "choose_league": "🏆 *Elige una liga :*",
         "choose_match": "⚽ *Elige un partido :*",
         "choose_market": "📊 *Elige un mercado :*",
         "no_match_today": "⚠️ Sin partidos hoy.",
         "no_match_week": "⚠️ Sin partidos en 7 días.",
-        "market_h2h": "🔮 1X2",
-        "market_spreads": "📐 Hándicap",
-        "market_totals": "📈 Más/Menos",
+        "m_1x2": "🔮 1X2 + Cuotas",
+        "m_ou": "📈 Más/Menos",
+        "m_score": "⚽ Marcador previsto",
+        "m_advice": "💡 Consejo API",
+        "m_compare": "📊 Comparación",
+        "m_all": "📚 Todos los mercados",
         "no_market": "❌ Sin mercado.",
-        "best_odds": "🏆 Mejores cuotas",
-        "value_analysis": "💎 Análisis de valor",
         "search_prompt": "⚽ *Búsqueda*\n\nEnvía un nombre.",
         "follow_prompt": "🔔 Envía `seguir Arsenal`.",
         "following": "✅ Sigues a *{team}*.",
         "following_list": "📋 *Equipos seguidos*",
         "stats_title": "📊 *Estadísticas*",
-        "stats_saved": "Pronósticos:",
-        "stats_correct": "Correctos:",
-        "stats_rate": "Tasa:",
         "no_data": "📊 Sin datos.",
         "help_text": "❓ *Ayuda*\n\nUsa los botones.",
         "matches_found": "🔍 *{count} partido(s)* :",
         "page": "📄 Página",
         "prev": "⬅️ Anterior",
         "next": "Siguiente ➡️",
-        "prev_short": "⬅️ Ant.",
-        "next_short": "Sig. ➡️",
-        "total_leagues": "📊 {count} ligas",
-        "no_league_matches": "ℹ️ Sin partidos.",
         "match_count": "🔮 *{count} partidos:*",
     },
     "pt": {
@@ -185,47 +149,37 @@ LANGUAGES = {
         "lang_set": "✅ Idioma: *Português*.",
         "menu_pred_today": "🔮 Prognósticos de hoje",
         "menu_week": "📅 Prognósticos da semana",
-        "menu_by_league": "🏆 Por campeonato",
         "menu_search": "⚽ Buscar equipa",
         "menu_stats": "📊 Estatísticas",
         "menu_follow": "🔔 Seguir uma equipa",
-        "menu_backtest": "📈 Backtesting",
         "menu_trends": "📊 Minhas tendências",
         "menu_lang": "🌐 Idioma",
         "menu_help": "❓ Ajuda",
         "menu_reset": "🔄 Reiniciar",
-        "no_matches": "⚠️ Nenhum jogo.",
         "loading": "⏳ *A carregar...*",
         "back": "🔙 Voltar",
-        "choose_league": "🏆 *Escolhe um campeonato :*",
         "choose_match": "⚽ *Escolhe um jogo :*",
         "choose_market": "📊 *Escolhe um mercado :*",
         "no_match_today": "⚠️ Sem jogos hoje.",
         "no_match_week": "⚠️ Sem jogos em 7 dias.",
-        "market_h2h": "🔮 1X2",
-        "market_spreads": "📐 Handicap",
-        "market_totals": "📈 Mais/Menos",
+        "m_1x2": "🔮 1X2 + Cotações",
+        "m_ou": "📈 Mais/Menos",
+        "m_score": "⚽ Resultado previsto",
+        "m_advice": "💡 Conselho API",
+        "m_compare": "📊 Comparação",
+        "m_all": "📚 Todos os mercados",
         "no_market": "❌ Sem mercado.",
-        "best_odds": "🏆 Melhores cotações",
-        "value_analysis": "💎 Análise de valor",
         "search_prompt": "⚽ *Busca*\n\nEnvia um nome.",
         "follow_prompt": "🔔 Envia `seguir Arsenal`.",
         "following": "✅ Segues *{team}*.",
         "following_list": "📋 *Equipas seguidas*",
         "stats_title": "📊 *Estatísticas*",
-        "stats_saved": "Prognósticos:",
-        "stats_correct": "Corretos:",
-        "stats_rate": "Taxa:",
         "no_data": "📊 Sem dados.",
         "help_text": "❓ *Ajuda*\n\nUsa os botões.",
         "matches_found": "🔍 *{count} jogo(s)* :",
         "page": "📄 Página",
         "prev": "⬅️ Anterior",
         "next": "Seguinte ➡️",
-        "prev_short": "⬅️ Ant.",
-        "next_short": "Seg. ➡️",
-        "total_leagues": "📊 {count} campeonatos",
-        "no_league_matches": "ℹ️ Sem jogos.",
         "match_count": "🔮 *{count} jogos:*",
     },
     "ar": {
@@ -234,47 +188,37 @@ LANGUAGES = {
         "lang_set": "✅ اللغة: *العربية*.",
         "menu_pred_today": "🔮 توقعات اليوم",
         "menu_week": "📅 توقعات الأسبوع",
-        "menu_by_league": "🏆 حسب البطولة",
         "menu_search": "⚽ البحث عن فريق",
         "menu_stats": "📊 الإحصائيات",
         "menu_follow": "🔔 متابعة فريق",
-        "menu_backtest": "📈 الاختبار",
         "menu_trends": "📊 اتجاهاتي",
         "menu_lang": "🌐 اللغة",
         "menu_help": "❓ مساعدة",
         "menu_reset": "🔄 إعادة تعيين",
-        "no_matches": "⚠️ لا مباريات.",
         "loading": "⏳ *جاري التحميل...*",
         "back": "🔙 رجوع",
-        "choose_league": "🏆 *اختر بطولة :*",
         "choose_match": "⚽ *اختر مباراة :*",
         "choose_market": "📊 *اختر سوقاً :*",
         "no_match_today": "⚠️ لا مباريات اليوم.",
         "no_match_week": "⚠️ لا مباريات في 7 أيام.",
-        "market_h2h": "🔮 1X2",
-        "market_spreads": "📐 هانديكاب",
-        "market_totals": "📈 أكثر/أقل",
+        "m_1x2": "🔮 1X2",
+        "m_ou": "📈 أكثر/أقل",
+        "m_score": "⚽ النتيجة المتوقعة",
+        "m_advice": "💡 نصيحة API",
+        "m_compare": "📊 مقارنة",
+        "m_all": "📚 كل الأسواق",
         "no_market": "❌ لا سوق متاح.",
-        "best_odds": "🏆 أفضل الأسعار",
-        "value_analysis": "💎 تحليل القيمة",
         "search_prompt": "⚽ *بحث*\n\nأرسل اسماً.",
         "follow_prompt": "🔔 أرسل `suivre Arsenal`.",
         "following": "✅ تتابع *{team}*.",
         "following_list": "📋 *الفرق المتابعة*",
         "stats_title": "📊 *الإحصائيات*",
-        "stats_saved": "التوقعات:",
-        "stats_correct": "الصحيحة:",
-        "stats_rate": "النسبة:",
         "no_data": "📊 لا بيانات.",
         "help_text": "❓ *مساعدة*\n\nاستخدم الأزرار.",
         "matches_found": "🔍 *{count} مباراة* :",
         "page": "📄 صفحة",
         "prev": "⬅️ السابق",
         "next": "التالي ➡️",
-        "prev_short": "⬅️ السابق",
-        "next_short": "التالي ➡️",
-        "total_leagues": "📊 {count} بطولة",
-        "no_league_matches": "ℹ️ لا مباريات.",
         "match_count": "🔮 *{count} مباريات:*",
     }
 }
@@ -291,40 +235,31 @@ def t(lang, key, **kwargs):
 # ------------------------------------------------------------
 # 3. UTILITAIRES
 # ------------------------------------------------------------
-def format_date(iso_date):
-    if not iso_date:
-        return "?"
-    try:
-        return datetime.strptime(iso_date[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
-    except:
-        return iso_date[:10] if len(iso_date) >= 10 else "?"
-
 def format_datetime(iso_date):
     if not iso_date:
         return "?"
     try:
-        dt = datetime.strptime(iso_date[:19].replace("Z", ""), "%Y-%m-%dT%H:%M:%S")
+        dt = datetime.strptime(iso_date[:19], "%Y-%m-%dT%H:%M:%S")
         return dt.strftime("%d/%m/%Y %Hh%M")
     except:
-        try:
-            dt = datetime.strptime(iso_date[:16], "%Y-%m-%dT%H:%M")
-            return dt.strftime("%d/%m/%Y %Hh%M")
-        except:
-            return format_date(iso_date)
+        return iso_date[:10] if len(iso_date) >= 10 else "?"
 
-def generate_progress_bar(value, total=100, length=10):
-    filled = int((value / total) * length)
+def progress_bar(value, total=100, length=10):
+    try:
+        v = float(value)
+    except:
+        v = 0
+    filled = int((v / total) * length)
     return "█" * filled + "░" * (length - filled)
 
 def is_match_upcoming(match, tolerance_minutes=20):
     try:
-        commence = match.get("event_date", "")
-        if not commence:
+        date_str = match.get("fixture", {}).get("date", "")
+        if not date_str:
             return True
-        dt = datetime.strptime(commence[:19].replace("Z", ""), "%Y-%m-%dT%H:%M:%S")
+        dt = datetime.strptime(date_str[:19], "%Y-%m-%dT%H:%M:%S")
         now_utc = datetime.utcnow()
-        deadline = dt + timedelta(minutes=tolerance_minutes)
-        return now_utc <= deadline
+        return now_utc <= dt + timedelta(minutes=tolerance_minutes)
     except:
         return True
 
@@ -342,8 +277,6 @@ def init_db():
         user_id INTEGER PRIMARY KEY, chat_id TEXT, username TEXT, lang TEXT, created_at TEXT)''')
     cur.execute('''CREATE TABLE IF NOT EXISTS followed_teams (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, team_name TEXT, created_at TEXT)''')
-    cur.execute('''CREATE TABLE IF NOT EXISTS sent_notifications (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, match_id TEXT, sent_at TEXT)''')
     conn.commit()
     conn.close()
 
@@ -405,262 +338,240 @@ def get_stats(user_id, lang):
     conn.close()
     if total and total > 0:
         rate = ((correct or 0) / total * 100)
-        return f"{t(lang, 'stats_title')}\n\n{t(lang, 'stats_saved')} {total}\n{t(lang, 'stats_correct')} {correct or 0}\n{t(lang, 'stats_rate')} {rate:.1f}%"
+        return f"{t(lang, 'stats_title')}\n\nPronostics : {total}\nJustes : {correct or 0}\nTaux : {rate:.1f}%"
     return t(lang, "no_data")
 
 # ------------------------------------------------------------
-# 5. API THERUNDOWN
+# 5. API-FOOTBALL
 # ------------------------------------------------------------
-_matches_cache = {}
-_matches_cache_time = {}
+_cache = {}
+_cache_time = {}
 
-def therundown_request(endpoint, params=None, retries=2):
-    if params is None:
-        params = {}
-    headers = {
-        "X-RapidAPI-Key": RAPIDAPI_KEY,
-        "X-RapidAPI-Host": RAPIDAPI_HOST,
-    }
-    url = f"{API_BASE_URL}{endpoint}"
-    for attempt in range(retries):
-        try:
-            r = requests.get(url, headers=headers, params=params, timeout=10)
-            if r.status_code == 200:
-                return r.json()
-            print(f"⚠️ Erreur {r.status_code}: {r.text[:200]}")
-        except Exception as e:
-            print(f"⚠️ {endpoint}: {e}")
-        if attempt < retries - 1:
-            time.sleep(1)
+def api_request(endpoint, params=None, cache_ttl=600):
+    cache_key = f"{endpoint}_{str(params)}"
+    now = time.time()
+    if cache_key in _cache and cache_key in _cache_time:
+        if now - _cache_time[cache_key] < cache_ttl:
+            return _cache[cache_key]
+    headers = {"x-apisports-key": API_FOOTBALL_KEY}
+    try:
+        r = requests.get(f"{API_BASE_URL}/{endpoint}", headers=headers, params=params, timeout=15)
+        if r.status_code == 200:
+            data = r.json()
+            if data.get("errors"):
+                print(f"⚠️ API-Football: {data['errors']}")
+                return None
+            _cache[cache_key] = data
+            _cache_time[cache_key] = now
+            return data
+    except Exception as e:
+        print(f"⚠️ {endpoint}: {e}")
     return None
 
-def get_events_for_date(date_str, cache_ttl=600):
-    """Récupère les matchs de football pour une date (YYYY-MM-DD)."""
-    now = time.time()
-    cache_key = f"events_{date_str}"
-    if cache_key in _matches_cache and cache_key in _matches_cache_time:
-        if now - _matches_cache_time[cache_key] < cache_ttl:
-            return _matches_cache[cache_key]
-    
-    data = therundown_request(f"/sports/{FOOTBALL_SPORT_ID}/events/{date_str}")
-    if not data:
-        if cache_key in _matches_cache:
-            return _matches_cache[cache_key]
-        return []
-    
-    events = data.get("events", [])
-    _matches_cache[cache_key] = events
-    _matches_cache_time[cache_key] = now
-    return events
-
-def format_match_from_rundown(ev):
-    """Convertit un événement TheRundown au format interne."""
-    try:
-        teams = ev.get("teams", [])
-        home_team = "?"
-        away_team = "?"
-        for team in teams:
-            if team.get("is_home"):
-                home_team = team.get("name", "?")
-            else:
-                away_team = team.get("name", "?")
-        
-        # Récupérer les cotes (TheRundown fournit souvent des lignes)
-        lines = ev.get("lines", {})
-        bookmakers = []
-        if lines:
-            for market_key, market_data in lines.items():
-                if isinstance(market_data, list):
-                    for line in market_data:
-                        if isinstance(line, dict):
-                            bookmakers.append({
-                                "key": market_key,
-                                "outcomes": line.get("outcomes", [])
-                            })
-        
-        return {
-            "id": ev.get("event_id"),
-            "home_team": home_team,
-            "away_team": away_team,
-            "league_name": ev.get("sport_name", "Football"),
-            "commence_time": ev.get("event_date", ""),
-            "bookmakers": bookmakers,
-            "raw": ev  # On garde les données brutes
-        }
-    except Exception as e:
-        print(f"⚠️ Erreur format: {e}")
-        return None
+def get_fixtures_by_date(date_str):
+    data = api_request("fixtures", params={"date": date_str}, cache_ttl=900)
+    return data.get("response", []) if data else []
 
 def get_matches_today():
     today = datetime.now().strftime("%Y-%m-%d")
-    events = get_events_for_date(today)
+    fixtures = get_fixtures_by_date(today)
     matches = []
-    for ev in events:
-        if not is_match_upcoming(ev):
+    for f in fixtures:
+        if not is_match_upcoming(f):
             continue
-        m = format_match_from_rundown(ev)
-        if m:
-            matches.append(m)
-    matches.sort(key=lambda x: x.get("commence_time", ""))
+        status = f.get("fixture", {}).get("status", {}).get("short", "")
+        if status in ("FT", "AET", "PEN"):
+            continue
+        matches.append(f)
+    matches.sort(key=lambda x: x.get("fixture", {}).get("date", ""))
     return matches
 
 def get_matches_week():
     all_matches = []
     for i in range(8):
         date_str = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
-        events = get_events_for_date(date_str)
-        for ev in events:
-            if not is_match_upcoming(ev):
+        for f in get_fixtures_by_date(date_str):
+            if not is_match_upcoming(f):
                 continue
-            m = format_match_from_rundown(ev)
-            if m:
-                all_matches.append(m)
-    all_matches.sort(key=lambda x: x.get("commence_time", ""))
+            status = f.get("fixture", {}).get("status", {}).get("short", "")
+            if status in ("FT", "AET", "PEN"):
+                continue
+            all_matches.append(f)
+    all_matches.sort(key=lambda x: x.get("fixture", {}).get("date", ""))
     return all_matches
 
-def get_all_matches(days_ahead=None):
-    if days_ahead is None:
-        return get_matches_week()
-    all_matches = []
-    for i in range(days_ahead + 1):
-        date_str = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
-        events = get_events_for_date(date_str)
-        for ev in events:
-            if not is_match_upcoming(ev):
-                continue
-            m = format_match_from_rundown(ev)
-            if m:
-                all_matches.append(m)
-    all_matches.sort(key=lambda x: x.get("commence_time", ""))
-    return all_matches
+def get_predictions(fixture_id):
+    data = api_request("predictions", params={"fixture": fixture_id}, cache_ttl=1800)
+    if not data or not data.get("response"):
+        return None
+    return data["response"][0]
 
-# ------------------------------------------------------------
-# 6. MARCHÉS (basé sur les données brutes TheRundown)
-# ------------------------------------------------------------
-def get_available_markets(match):
-    """Détecte les marchés disponibles."""
-    markets = set()
-    raw = match.get("raw", {})
-    lines = raw.get("lines", {})
-    for key in lines.keys():
-        if "moneyline" in key.lower() or "1x2" in key.lower():
-            markets.add("h2h")
-        elif "spread" in key.lower():
-            markets.add("spreads")
-        elif "total" in key.lower():
-            markets.add("totals")
-    if not markets:
-        markets = {"h2h"}  # Par défaut, on suppose 1X2
-    return list(markets)
-
-def get_market_predictions(match, market_type="h2h"):
-    """Extrait les probabilités depuis les cotes TheRundown."""
+# ---------- TOUS LES MARCHÉS ----------
+def get_all_markets_text(fixture, lang="fr"):
+    """Affiche TOUS les marchés disponibles pour un match."""
     try:
-        raw = match.get("raw", {})
-        lines = raw.get("lines", {})
+        fixture_id = fixture.get("fixture", {}).get("id")
+        if not fixture_id:
+            return t(lang, "no_market")
         
-        # Chercher les cotes 1X2
-        target_keys = []
-        if market_type == "h2h":
-            target_keys = ["moneyline", "1x2", "h2h"]
-        elif market_type == "spreads":
-            target_keys = ["spread", "pointspread"]
-        elif market_type == "totals":
-            target_keys = ["total", "overunder"]
+        preds = get_predictions(fixture_id)
+        if not preds:
+            return t(lang, "no_market")
         
-        for key, market_data in lines.items():
-            if any(tk in key.lower() for tk in target_keys):
-                if isinstance(market_data, list) and market_data:
-                    for line in market_data:
-                        if not isinstance(line, dict):
-                            continue
-                        outcomes = line.get("outcomes", [])
-                        if not outcomes:
-                            continue
-                        
-                        # Extraire les prix
-                        prices = []
-                        for o in outcomes:
-                            price = o.get("price", 0)
-                            if price and price > 0:
-                                prices.append({"name": o.get("name", "?"), "price": price, "prob": (1/price)*100})
-                        
-                        if market_type == "h2h" and len(prices) >= 3:
-                            home = match["home_team"]
-                            away = match["away_team"]
-                            ph = next((p["prob"] for p in prices if home.lower() in p["name"].lower()), 0)
-                            pd = next((p["prob"] for p in prices if "draw" in p["name"].lower() or "nul" in p["name"].lower()), 0)
-                            pa = next((p["prob"] for p in prices if away.lower() in p["name"].lower()), 0)
-                            total = ph + pd + pa
-                            if total > 0:
-                                ph = (ph/total)*100; pd = (pd/total)*100; pa = (pa/total)*100
-                                if ph > pa and ph > pd:
-                                    pred = f"🏠 {home}"
-                                elif pa > ph and pa > pd:
-                                    pred = f"✈️ {away}"
-                                else:
-                                    pred = "🤝 Nul"
-                                return {"type": "1X2", "prob_home": ph, "prob_draw": pd, "prob_away": pa,
-                                        "prediction": pred,
-                                        "display": f"🏠 {home} : {ph:.1f}% {generate_progress_bar(ph)}\n🤝 Nul : {pd:.1f}% {generate_progress_bar(pd)}\n✈️ {away} : {pa:.1f}% {generate_progress_bar(pa)}"}
-                        elif market_type in ("spreads", "totals") and len(prices) >= 2:
-                            best = max(prices, key=lambda x: x["prob"])
-                            point = outcomes[0].get("point", "") if outcomes else ""
-                            pred = f"{best['name']} {point}"
-                            return {"type": "Handicap" if market_type == "spreads" else "Over/Under",
-                                    "prediction": pred,
-                                    "display": "\n".join([f"{p['name']} {point} : {p['prob']:.1f}% {generate_progress_bar(p['prob'])}" for p in prices])}
+        home = fixture.get("teams", {}).get("home", {}).get("name", "?")
+        away = fixture.get("teams", {}).get("away", {}).get("name", "?")
+        predictions = preds.get("predictions", {})
+        percent = predictions.get("percent", {})
+        comparison = preds.get("comparison", {})
+        teams_stats = preds.get("teams", {})
         
-        return {"error": "not_available"}
+        txt = f"⚽ *{home} vs {away}*\n\n"
+        
+        # ---- 1X2 ----
+        ph = percent.get("home", "0%")
+        pd = percent.get("draw", "0%")
+        pa = percent.get("away", "0%")
+        txt += f"🔮 *1X2*\n"
+        txt += f"🏠 {home} : {ph} {progress_bar(ph.replace('%',''))}\n"
+        txt += f"🤝 Nul : {pd} {progress_bar(pd.replace('%',''))}\n"
+        txt += f"✈️ {away} : {pa} {progress_bar(pa.replace('%',''))}\n\n"
+        
+        # ---- WINNER ----
+        winner = predictions.get("winner", {})
+        if winner.get("name"):
+            txt += f"🏆 *Vainqueur prévu* : {winner['name']}"
+            if winner.get("comment"):
+                txt += f" _{winner['comment']}_"
+            txt += "\n\n"
+        
+        # ---- WIN OR DRAW ----
+        wod = predictions.get("win_or_draw")
+        if wod is not None:
+            txt += f"🎯 *Win or Draw* : {'✅ Oui' if wod else '❌ Non'}\n\n"
+        
+        # ---- UNDER / OVER ----
+        uo = predictions.get("under_over")
+        if uo and uo != "N/A":
+            txt += f"📈 *Under/Over* : {uo}\n\n"
+        
+        # ---- GOALS ----
+        goals = predictions.get("goals", {})
+        if goals:
+            txt += f"⚽ *Score prévu* : {home} {goals.get('home','?')} - {goals.get('away','?')} {away}\n\n"
+        
+        # ---- ADVICE ----
+        advice = predictions.get("advice")
+        if advice and advice != "No predictions available":
+            txt += f"💡 *Conseil* : {advice}\n\n"
+        
+        # ---- COMPARAISON ----
+        if comparison:
+            txt += f"📊 *Comparaison*\n"
+            for key, label in [("form", "Forme"), ("att", "Attaque"), ("def", "Défense"),
+                               ("poisson_distribution", "Poisson"), ("h2h", "H2H"),
+                               ("goals", "Buts"), ("total", "Total")]:
+                data = comparison.get(key, {})
+                h = data.get("home", "?")
+                a = data.get("away", "?")
+                txt += f"`{label:<10} 🏠 {h:<6} ✈️ {a}`\n"
+            txt += "\n"
+        
+        # ---- FORME DES ÉQUIPES ----
+        for team_key in ["home", "away"]:
+            ts = teams_stats.get(team_key, {})
+            form = ts.get("forme", "")
+            if form:
+                emoji = ts.get("name", "?")
+                txt += f"📈 *{emoji}* : {form}\n"
+        
+        return txt
     except Exception as e:
-        return {"error": str(e)}
+        return f"❌ Erreur : {str(e)[:100]}"
 
-def get_best_odds(match):
-    best = {"home": (0, ""), "draw": (0, ""), "away": (0, "")}
-    raw = match.get("raw", {})
-    lines = raw.get("lines", {})
-    for key, market_data in lines.items():
-        if "moneyline" in key.lower() or "1x2" in key.lower():
-            if isinstance(market_data, list):
-                for line in market_data:
-                    if isinstance(line, dict):
-                        for o in line.get("outcomes", []):
-                            name = o.get("name", "")
-                            price = o.get("price", 0)
-                            if match["home_team"].lower() in name.lower() and price > best['home'][0]:
-                                best['home'] = (price, key)
-                            elif "draw" in name.lower() and price > best['draw'][0]:
-                                best['draw'] = (price, key)
-                            elif match["away_team"].lower() in name.lower() and price > best['away'][0]:
-                                best['away'] = (price, key)
-    return best
-
-def format_best_odds(match, lang):
-    best = get_best_odds(match)
-    texte = f"{t(lang, 'best_odds')}\n\n"
-    texte += f"🏠 {match['home_team']} : *{best['home'][0]}*\n"
-    texte += f"🤝 Nul : *{best['draw'][0]}*\n"
-    texte += f"✈️ {match['away_team']} : *{best['away'][0]}*\n"
-    return texte
-
-def analyze_value(match, lang):
-    pred = get_market_predictions(match, "h2h")
-    if "error" in pred:
-        return t(lang, "no_market")
-    best = get_best_odds(match)
-    texte = f"{t(lang, 'value_analysis')}\n\n"
-    for key, name in [("home", f"🏠 {match['home_team']}"), ("draw", "🤝 Nul"), ("away", f"✈️ {match['away_team']}")]:
-        prob = pred.get(f"prob_{key}", 0)
-        cote = best[key][0] if best[key][0] > 0 else 0
-        if cote > 0:
-            implied = 100 / cote
-            valeur = prob - implied
-            emoji = "🟢" if valeur > 3 else ("🟡" if valeur > -3 else "🔴")
-            texte += f"{emoji} {name}\n   Proba : {prob:.1f}% | Cote : {cote} | Valeur : {valeur:+.1f}\n"
-    return texte
+def get_market_text(fixture, market_type, lang="fr"):
+    """Affiche un marché spécifique."""
+    try:
+        fixture_id = fixture.get("fixture", {}).get("id")
+        if not fixture_id:
+            return t(lang, "no_market")
+        preds = get_predictions(fixture_id)
+        if not preds:
+            return t(lang, "no_market")
+        
+        home = fixture.get("teams", {}).get("home", {}).get("name", "?")
+        away = fixture.get("teams", {}).get("away", {}).get("name", "?")
+        predictions = preds.get("predictions", {})
+        comparison = preds.get("comparison", {})
+        percent = predictions.get("percent", {})
+        
+        if market_type == "h2h":
+            ph = percent.get("home", "0%").replace("%", "")
+            pd = percent.get("draw", "0%").replace("%", "")
+            pa = percent.get("away", "0%").replace("%", "")
+            ph_f = float(ph) if ph else 0
+            pd_f = float(pd) if pd else 0
+            pa_f = float(pa) if pa else 0
+            if ph_f > pa_f and ph_f > pd_f:
+                pred = f"🏠 {home}"
+            elif pa_f > ph_f and pa_f > pd_f:
+                pred = f"✈️ {away}"
+            else:
+                pred = "🤝 Nul"
+            txt = f"🔮 *1X2*\n\n"
+            txt += f"🏠 {home} : {ph_f:.1f}% {progress_bar(ph_f)}\n"
+            txt += f"🤝 Nul : {pd_f:.1f}% {progress_bar(pd_f)}\n"
+            txt += f"✈️ {away} : {pa_f:.1f}% {progress_bar(pa_f)}\n\n"
+            txt += f"✅ *{pred}*"
+            return txt, {"prob_home": ph_f, "prob_draw": pd_f, "prob_away": pa_f, "prediction": pred}
+        
+        elif market_type == "ou":
+            uo = predictions.get("under_over", "N/A")
+            goals = predictions.get("goals", {})
+            txt = f"📈 *Over/Under*\n\n"
+            txt += f"🎯 Prédiction : *{uo}*\n\n"
+            txt += f"⚽ Buts prévus :\n"
+            txt += f"🏠 {home} : {goals.get('home','?')}\n"
+            txt += f"✈️ {away} : {goals.get('away','?')}\n"
+            return txt, {"prediction": uo}
+        
+        elif market_type == "score":
+            goals = predictions.get("goals", {})
+            gh = goals.get("home", "?")
+            ga = goals.get("away", "?")
+            txt = f"⚽ *Score exact prévu*\n\n"
+            txt += f"🎯 *{home} {gh} - {ga} {away}*\n\n"
+            winner = predictions.get("winner", {}).get("name", "?")
+            txt += f"🏆 Vainqueur : {winner}"
+            return txt, {"prediction": f"{gh}-{ga}"}
+        
+        elif market_type == "advice":
+            advice = predictions.get("advice", "N/A")
+            winner = predictions.get("winner", {})
+            txt = f"💡 *Conseil API-Football*\n\n"
+            txt += f"📌 {advice}\n\n"
+            if winner.get("name"):
+                txt += f"🏆 Favori : *{winner['name']}*\n"
+                if winner.get("comment"):
+                    txt += f"_{winner['comment']}_"
+            return txt, {"prediction": advice}
+        
+        elif market_type == "compare":
+            txt = f"📊 *Comparaison des stats*\n\n"
+            for key, label in [("form", "Forme"), ("att", "Attaque"), ("def", "Défense"),
+                               ("poisson_distribution", "Poisson"), ("h2h", "H2H"),
+                               ("goals", "Buts"), ("total", "Total")]:
+                data = comparison.get(key, {})
+                h = data.get("home", "?")
+                a = data.get("away", "?")
+                txt += f"`{label:<12} 🏠 {h:<6} ✈️ {a}`\n"
+            return txt, {"prediction": "Comparaison"}
+        
+        return t(lang, "no_market"), None
+    except Exception as e:
+        return f"❌ Erreur : {str(e)[:100]}", None
 
 # ------------------------------------------------------------
-# 7. MENUS
+# 6. MENUS
 # ------------------------------------------------------------
 def menu_options(lang):
     markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
@@ -685,13 +596,15 @@ def menu_lang_inline():
 
 def menu_matchs_list(matches, prefix="match_day", lang="fr", page=0):
     markup = InlineKeyboardMarkup(row_width=1)
-    per_page = 10
+    per_page = 8
     start = page * per_page
     end = start + per_page
-    for i, m in enumerate(matches[start:end]):
-        dt = format_datetime(m.get("commence_time", ""))
+    for i, f in enumerate(matches[start:end]):
         idx = start + i
-        markup.add(InlineKeyboardButton(f"📅 {dt}\n⚽ {m['home_team']} vs {m['away_team']}",
+        date_str = format_datetime(f.get("fixture", {}).get("date", ""))
+        home = f.get("teams", {}).get("home", {}).get("name", "?")
+        away = f.get("teams", {}).get("away", {}).get("name", "?")
+        markup.add(InlineKeyboardButton(f"📅 {date_str}\n⚽ {home} vs {away}",
                                          callback_data=f"{prefix}_{idx}"))
     nav = []
     if page > 0:
@@ -703,23 +616,19 @@ def menu_matchs_list(matches, prefix="match_day", lang="fr", page=0):
     markup.add(InlineKeyboardButton(t(lang, "back"), callback_data="menu_back"))
     return markup
 
-def menu_match_actions(match_id, lang="fr", available_markets=None):
+def menu_match_actions(match_id, lang="fr"):
     markup = InlineKeyboardMarkup(row_width=1)
-    if available_markets is None:
-        available_markets = ["h2h"]
-    if "h2h" in available_markets:
-        markup.add(InlineKeyboardButton(t(lang, "market_h2h"), callback_data=f"market_{match_id}_h2h"))
-    if "spreads" in available_markets:
-        markup.add(InlineKeyboardButton(t(lang, "market_spreads"), callback_data=f"market_{match_id}_spreads"))
-    if "totals" in available_markets:
-        markup.add(InlineKeyboardButton(t(lang, "market_totals"), callback_data=f"market_{match_id}_totals"))
-    markup.add(InlineKeyboardButton(t(lang, "best_odds"), callback_data=f"bestodds_{match_id}"))
-    markup.add(InlineKeyboardButton(t(lang, "value_analysis"), callback_data=f"value_{match_id}"))
+    markup.add(InlineKeyboardButton(t(lang, "m_all"), callback_data=f"market_{match_id}_all"))
+    markup.add(InlineKeyboardButton(t(lang, "m_1x2"), callback_data=f"market_{match_id}_h2h"))
+    markup.add(InlineKeyboardButton(t(lang, "m_ou"), callback_data=f"market_{match_id}_ou"))
+    markup.add(InlineKeyboardButton(t(lang, "m_score"), callback_data=f"market_{match_id}_score"))
+    markup.add(InlineKeyboardButton(t(lang, "m_advice"), callback_data=f"market_{match_id}_advice"))
+    markup.add(InlineKeyboardButton(t(lang, "m_compare"), callback_data=f"market_{match_id}_compare"))
     markup.add(InlineKeyboardButton(t(lang, "back"), callback_data="back_to_matches"))
     return markup
 
 # ------------------------------------------------------------
-# 8. BOT TELEGRAM
+# 7. BOT TELEGRAM
 # ------------------------------------------------------------
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 bot.match_cache = {}
@@ -737,7 +646,6 @@ def handle_start(message):
     cur.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
     exists = cur.fetchone()
     conn.close()
-    
     if not exists:
         register_user(user_id, message.chat.id, message.from_user.username, None)
         bot.reply_to(message, t("fr", "welcome") + "\n\n" + t("fr", "choose_lang"),
@@ -793,80 +701,54 @@ def handle_callback(call):
             return
 
         if call.data.startswith("match_day_"):
-            match = bot.match_cache.get(call.data)
-            if not match:
+            fixture = bot.match_cache.get(call.data)
+            if not fixture:
                 bot.send_message(chat_id, "❌ Match introuvable.")
                 return
-            bot.current_match_data[call.data] = match
-            dt = format_datetime(match.get("commence_time", ""))
-            league = match.get('league_name', '?')
+            bot.current_match_data[call.data] = fixture
+            dt = format_datetime(fixture.get("fixture", {}).get("date", ""))
+            league = fixture.get("league", {}).get("name", "?")
+            home = fixture.get("teams", {}).get("home", {}).get("name", "?")
+            away = fixture.get("teams", {}).get("away", {}).get("name", "?")
             texte = (f"🏆 *{league}*\n"
                      f"📅 {dt}\n\n"
-                     f"⚽ *{match['home_team']} vs {match['away_team']}*\n\n"
+                     f"⚽ *{home} vs {away}*\n\n"
                      f"{t(lang, 'choose_market')}")
-            available = get_available_markets(match)
             bot.send_message(chat_id, texte, parse_mode="Markdown",
-                             reply_markup=menu_match_actions(call.data, lang, available))
-            return
-
-        if call.data.startswith("bestodds_"):
-            mid = call.data.replace("bestodds_", "")
-            match = bot.current_match_data.get(mid) or bot.match_cache.get(mid)
-            if not match:
-                bot.send_message(chat_id, "❌ Match introuvable.")
-                return
-            available = get_available_markets(match)
-            texte = format_best_odds(match, lang)
-            bot.send_message(chat_id, texte, parse_mode="Markdown",
-                             reply_markup=menu_match_actions(mid, lang, available))
-            return
-
-        if call.data.startswith("value_"):
-            mid = call.data.replace("value_", "")
-            match = bot.current_match_data.get(mid) or bot.match_cache.get(mid)
-            if not match:
-                bot.send_message(chat_id, "❌ Match introuvable.")
-                return
-            available = get_available_markets(match)
-            texte = analyze_value(match, lang)
-            bot.send_message(chat_id, texte, parse_mode="Markdown",
-                             reply_markup=menu_match_actions(mid, lang, available))
+                             reply_markup=menu_match_actions(call.data, lang))
             return
 
         if call.data.startswith("market_"):
             parts = call.data.replace("market_", "").rsplit("_", 1)
             market_type = parts[-1]
             mid = parts[0]
-            match = bot.current_match_data.get(mid) or bot.match_cache.get(mid)
-            if not match:
+            fixture = bot.current_match_data.get(mid) or bot.match_cache.get(mid)
+            if not fixture:
                 bot.send_message(chat_id, "❌ Match introuvable.")
                 return
-            pred = get_market_predictions(match, market_type)
-            if "error" in pred:
-                bot.send_message(chat_id, t(lang, "no_market"))
+            
+            home = fixture.get("teams", {}).get("home", {}).get("name", "?")
+            away = fixture.get("teams", {}).get("away", {}).get("name", "?")
+            dt = format_datetime(fixture.get("fixture", {}).get("date", ""))
+            league = fixture.get("league", {}).get("name", "?")
+            header = f"🏆 *{league}*\n📅 {dt}\n⚽ *{home} vs {away}*\n\n"
+            
+            # === TOUS LES MARCHÉS ===
+            if market_type == "all":
+                txt = get_all_markets_text(fixture, lang)
+                bot.send_message(chat_id, header + txt, parse_mode="Markdown",
+                                 reply_markup=menu_match_actions(mid, lang))
                 return
-            save_prediction(match['home_team'], match['away_team'], pred.get('type', market_type),
-                            pred.get('prob_home', 0), pred.get('prob_draw', 0), pred.get('prob_away', 0),
-                            pred['prediction'], user_id)
-            dt = format_datetime(match.get("commence_time", ""))
-            texte = (f"🏆 *{match.get('league_name', '')}*\n"
-                     f"📅 {dt}\n\n"
-                     f"⚽ *{match['home_team']} vs {match['away_team']}*\n"
-                     f"📊 *{pred.get('type', market_type)}*\n\n"
-                     f"{pred['display']}\n\n"
-                     f"✅ *{pred['prediction']}*")
-            available = get_available_markets(match)
-            bot.send_message(chat_id, texte, parse_mode="Markdown",
-                             reply_markup=menu_match_actions(mid, lang, available))
-            return
-
-        if call.data == "unfollow_all":
-            conn = sqlite3.connect('predictions.db')
-            cur = conn.cursor()
-            cur.execute('DELETE FROM followed_teams WHERE user_id = ?', (user_id,))
-            conn.commit()
-            conn.close()
-            bot.send_message(chat_id, "✅ OK")
+            
+            # === MARCHÉS SPÉCIFIQUES ===
+            txt, data = get_market_text(fixture, market_type, lang)
+            if txt and data and market_type == "h2h":
+                save_prediction(home, away, "1X2",
+                                data.get('prob_home', 0), data.get('prob_draw', 0), data.get('prob_away', 0),
+                                data.get('prediction', ''), user_id)
+            
+            bot.send_message(chat_id, header + txt, parse_mode="Markdown",
+                             reply_markup=menu_match_actions(mid, lang))
             return
 
     except Exception as e:
@@ -926,7 +808,7 @@ def handle_text(message):
         if not all_matches:
             bot.edit_message_text(t(lang, "no_match_week"), chat_id, loading.message_id)
             return
-        bot.current_matches_list = all_matches[:50]
+        bot.current_matches_list = all_matches[:80]
         for i, m in enumerate(bot.current_matches_list):
             bot.match_cache[f"match_day_{i}"] = m
         bot.delete_message(chat_id, loading.message_id)
@@ -940,7 +822,7 @@ def handle_text(message):
                      parse_mode="Markdown", reply_markup=menu_options(lang))
         return
 
-    if text == t(lang, "menu_stats") or text == t(lang, "menu_backtest"):
+    if text == t(lang, "menu_stats"):
         bot.reply_to(message, get_stats(user_id, lang), parse_mode="Markdown", reply_markup=menu_options(lang))
         return
 
@@ -956,9 +838,7 @@ def handle_text(message):
     if text == t(lang, "menu_follow"):
         followed = get_followed_teams(user_id)
         if followed:
-            markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton("🗑️", callback_data="unfollow_all"))
-            bot.reply_to(message, f"{t(lang, 'following_list')}\n\n" + ", ".join([f[0] for f in followed]), reply_markup=markup)
+            bot.reply_to(message, f"{t(lang, 'following_list')}\n\n" + ", ".join([f[0] for f in followed]))
         else:
             bot.reply_to(message, t(lang, "follow_prompt"), parse_mode="Markdown")
         return
@@ -979,28 +859,24 @@ def handle_text(message):
     # Recherche libre
     loading = bot.reply_to(message, t(lang, "loading"), parse_mode="Markdown")
     try:
-        matches = get_all_matches(days_ahead=7)
+        matches = get_matches_week()
     except:
         matches = []
-    found = [m for m in matches if text.lower() in m['home_team'].lower() or text.lower() in m['away_team'].lower()]
+    found = [m for m in matches 
+             if text.lower() in m.get("teams", {}).get("home", {}).get("name", "").lower() 
+             or text.lower() in m.get("teams", {}).get("away", {}).get("name", "").lower()]
     if not found:
-        bot.edit_message_text(f"❌ {text}", chat_id, loading.message_id)
+        bot.edit_message_text(f"❌ Aucun match pour *{text}*.", chat_id, loading.message_id, parse_mode="Markdown")
         return
-    texte = t(lang, "matches_found", count=len(found)) + "\n\n"
-    for m in found[:10]:
-        pred = get_market_predictions(m, "h2h")
-        if "error" in pred:
-            continue
-        dt = format_datetime(m.get("commence_time", ""))
-        texte += (f"🏆 {m['league_name']}\n"
-                  f"📅 {dt}\n"
-                  f"⚽ {m['home_team']} vs {m['away_team']}\n"
-                  f"🏠 {pred['prob_home']:.1f}% | 🤝 {pred['prob_draw']:.1f}% | ✈️ {pred['prob_away']:.1f}%\n"
-                  f"✅ *{pred['prediction']}*\n\n")
-    bot.edit_message_text(texte, chat_id, loading.message_id, parse_mode="Markdown", reply_markup=menu_options(lang))
+    bot.current_matches_list = found[:50]
+    for i, m in enumerate(bot.current_matches_list):
+        bot.match_cache[f"match_day_{i}"] = m
+    bot.edit_message_text(t(lang, "matches_found", count=len(found)),
+                          chat_id, loading.message_id, parse_mode="Markdown",
+                          reply_markup=menu_matchs_list(bot.current_matches_list, "match_day", lang, 0))
 
 # ------------------------------------------------------------
-# 9. SERVEUR HTTP POUR RENDER
+# 8. SERVEUR HTTP POUR RENDER
 # ------------------------------------------------------------
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -1016,11 +892,11 @@ def run_http():
 threading.Thread(target=run_http, daemon=True).start()
 
 # ------------------------------------------------------------
-# 10. LANCEMENT
+# 9. LANCEMENT
 # ------------------------------------------------------------
 if __name__ == "__main__":
     init_db()
     print("✅ Base de données initialisée.")
-    print(f"⚽ TheRundown API configurée (sport_id={FOOTBALL_SPORT_ID})")
+    print("⚽ API-Football - Tous marchés activés")
     print("✅ Bot démarré.")
     bot.infinity_polling()
