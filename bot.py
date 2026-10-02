@@ -101,6 +101,59 @@ API_TERMS = {
 def at(lang, key):
     return API_TERMS.get(lang, API_TERMS["fr"]).get(key, key)
 
+def translate_advice(advice, lang):
+    """Traduit les conseils API-Football en langue cible."""
+    if not advice:
+        return advice
+    translations = {
+        "fr": {
+            "Combo Double chance": "Combo Double chance",
+            "Double chance": "Double chance",
+            " and ": " et ",
+            "goals": "buts",
+            "goal": "but",
+            "Winner:": "Vainqueur :",
+            "draw": "nul",
+            " or ": " ou ",
+        },
+        "es": {
+            "Combo Double chance": "Combo Doble oportunidad",
+            "Double chance": "Doble oportunidad",
+            " and ": " y ",
+            "goals": "goles",
+            "goal": "gol",
+            "Winner:": "Ganador:",
+            "draw": "empate",
+            " or ": " o ",
+        },
+        "pt": {
+            "Combo Double chance": "Combo Dupla chance",
+            "Double chance": "Dupla chance",
+            " and ": " e ",
+            "goals": "golos",
+            "goal": "golo",
+            "Winner:": "Vencedor:",
+            "draw": "empate",
+            " or ": " ou ",
+        },
+        "ar": {
+            "Combo Double chance": "فرصة مزدوجة مركبة",
+            "Double chance": "فرصة مزدوجة",
+            " and ": " و ",
+            "goals": "أهداف",
+            "goal": "هدف",
+            "Winner:": "الفائز:",
+            "draw": "تعادل",
+            " or ": " أو ",
+        },
+        "en": {},
+    }
+    t_dict = translations.get(lang, {})
+    result = advice
+    for en_term, translated in t_dict.items():
+        result = result.replace(en_term, translated)
+    return result
+
 # ------------------------------------------------------------
 # 4. LANGUES
 # ------------------------------------------------------------
@@ -495,7 +548,7 @@ def get_all_markets_text(fixture, lang="fr"):
         if winner.get("name"):
             txt += f"🏆 *{at(lang, 'winner')}* : {winner['name']}"
             if winner.get("comment"):
-                comment = winner['comment'].replace("Win or draw", at(lang, "win_or_draw"))
+                comment = translate_advice(winner['comment'], lang)
                 txt += f" _{comment}_"
             txt += "\n\n"
         wod = predictions.get("win_or_draw")
@@ -512,8 +565,8 @@ def get_all_markets_text(fixture, lang="fr"):
         txt += f"⚽ *{at(lang, 'score_predicted')}* : {home} {gh}-{ga} {away}\n\n"
         advice = predictions.get("advice")
         if advice and advice != "No predictions available":
-            advice_fr = advice.replace("Winner:", f"{at(lang, 'winner')}:")
-            txt += f"💡 *{at(lang, 'advice')}* : {advice_fr}\n\n"
+            advice_translated = translate_advice(advice, lang)
+            txt += f"💡 *{at(lang, 'advice')}* : {advice_translated}\n\n"
         if comparison:
             txt += f"📊 *{at(lang, 'total')}*\n"
             labels = [("form", at(lang, "form")), ("att", at(lang, "att")), ("def", at(lang, "def")),
@@ -586,14 +639,14 @@ def get_market_text(fixture, market_type, lang="fr"):
             winner = predictions.get("winner", {})
             txt = f"💡 *{at(lang, 'advice')}*\n\n"
             if advice and advice != "No predictions available":
-                advice_fr = advice.replace("Winner:", f"{at(lang, 'winner')}:")
-                txt += f"📌 {advice_fr}\n\n"
+                advice_translated = translate_advice(advice, lang)
+                txt += f"📌 {advice_translated}\n\n"
             else:
                 txt += f"📌 {at(lang, 'no_advice')}\n\n"
             if winner.get("name"):
                 txt += f"🏆 {at(lang, 'winner')} : *{winner['name']}*\n"
                 if winner.get("comment"):
-                    comment = winner['comment'].replace("Win or draw", at(lang, "win_or_draw"))
+                    comment = translate_advice(winner['comment'], lang)
                     txt += f"_{comment}_"
             return txt, {"prediction": advice}
         elif market_type == "compare":
@@ -958,6 +1011,6 @@ threading.Thread(target=run_http, daemon=True).start()
 if __name__ == "__main__":
     init_db()
     print("✅ Base de données initialisée.")
-    print("⚽ API-Football - Tous marchés + traduction complète")
+    print("⚽ API-Football - Traduction complète des conseils")
     print("✅ Bot démarré.")
     bot.infinity_polling()
