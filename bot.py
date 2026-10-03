@@ -47,55 +47,60 @@ API_TERMS = {
         "winner": "Vainqueur prévu", "advice": "Conseil",
         "form": "Forme", "att": "Attaque", "def": "Défense",
         "poisson": "Poisson", "h2h": "Confrontations",
-        "goals": "Buts", "total": "Total",
+        "goals": "Buts", "total": "Total", "total_goals": "Total buts",
         "yes": "✅ Oui", "no": "❌ Non",
         "not_available": "Non disponible", "no_advice": "Aucun conseil",
         "score_predicted": "Score exact prévu",
         "home": "Domicile", "away": "Extérieur", "draw": "Nul",
+        "over_25": "Plus de 2.5", "under_25": "Moins de 2.5",
     },
     "en": {
         "win_or_draw": "Win or Draw", "under_over": "Under/Over",
         "winner": "Predicted winner", "advice": "Advice",
         "form": "Form", "att": "Attack", "def": "Defense",
         "poisson": "Poisson", "h2h": "Head to Head",
-        "goals": "Goals", "total": "Total",
+        "goals": "Goals", "total": "Total", "total_goals": "Total goals",
         "yes": "✅ Yes", "no": "❌ No",
         "not_available": "Not available", "no_advice": "No advice",
         "score_predicted": "Predicted score",
         "home": "Home", "away": "Away", "draw": "Draw",
+        "over_25": "Over 2.5", "under_25": "Under 2.5",
     },
     "es": {
         "win_or_draw": "Victoria o Empate", "under_over": "Más/Menos goles",
         "winner": "Ganador previsto", "advice": "Consejo",
         "form": "Forma", "att": "Ataque", "def": "Defensa",
         "poisson": "Poisson", "h2h": "Cara a cara",
-        "goals": "Goles", "total": "Total",
+        "goals": "Goles", "total": "Total", "total_goals": "Total goles",
         "yes": "✅ Sí", "no": "❌ No",
         "not_available": "No disponible", "no_advice": "Sin consejo",
         "score_predicted": "Marcador previsto",
         "home": "Local", "away": "Visitante", "draw": "Empate",
+        "over_25": "Más de 2.5", "under_25": "Menos de 2.5",
     },
     "pt": {
         "win_or_draw": "Vitória ou Empate", "under_over": "Mais/Menos golos",
         "winner": "Vencedor previsto", "advice": "Conselho",
         "form": "Forma", "att": "Ataque", "def": "Defesa",
         "poisson": "Poisson", "h2h": "Confrontos",
-        "goals": "Golos", "total": "Total",
+        "goals": "Golos", "total": "Total", "total_goals": "Total golos",
         "yes": "✅ Sim", "no": "❌ Não",
         "not_available": "Não disponível", "no_advice": "Sem conselho",
         "score_predicted": "Resultado previsto",
         "home": "Casa", "away": "Fora", "draw": "Empate",
+        "over_25": "Mais de 2.5", "under_25": "Menos de 2.5",
     },
     "ar": {
         "win_or_draw": "فوز أو تعادل", "under_over": "أكثر/أقل",
         "winner": "الفائز المتوقع", "advice": "نصيحة",
         "form": "الشكل", "att": "الهجوم", "def": "الدفاع",
         "poisson": "بواسون", "h2h": "المواجهات",
-        "goals": "الأهداف", "total": "المجموع",
+        "goals": "الأهداف", "total": "المجموع", "total_goals": "إجمالي الأهداف",
         "yes": "✅ نعم", "no": "❌ لا",
         "not_available": "غير متاح", "no_advice": "لا نصيحة",
         "score_predicted": "النتيجة المتوقعة",
         "home": "المنزل", "away": "الخارج", "draw": "تعادل",
+        "over_25": "أكثر من 2.5", "under_25": "أقل من 2.5",
     },
 }
 
@@ -107,14 +112,9 @@ def translate_advice(advice, lang):
     if not advice:
         return advice
     
-    # ===== ÉTAPE 1 : Détection et reformulation AVANT traduction =====
-    # Format "Double chance : Team or draw" ou "Double chance : Team ou nul"
     reformulated_team = None
-    
-    # Cas anglais : "Double chance : X or draw"
     if "Double chance" in advice and (" or draw" in advice or " ou nul" in advice):
         try:
-            # Extraire l'équipe
             after_colon = advice.split(":", 1)[-1].strip() if ":" in advice else advice
             team = after_colon.replace(" or draw", "").replace(" ou nul", "").strip()
             if team:
@@ -122,7 +122,6 @@ def translate_advice(advice, lang):
         except:
             pass
     
-    # Si on a détecté le format "Double chance", reformuler directement
     if reformulated_team:
         if lang == "fr":
             return f"Victoire ou nul de {reformulated_team}"
@@ -135,61 +134,43 @@ def translate_advice(advice, lang):
         elif lang == "ar":
             return f"فوز أو تعادل لـ {reformulated_team}"
     
-    # ===== ÉTAPE 2 : Traduction normale (autres cas) =====
     if lang == "en":
         return advice
     
     replacements = {
         "fr": [
             ("Win or draw", "Victoire ou Nul"),
-            ("Winner:", "Vainqueur :"),
-            ("Winner :", "Vainqueur :"),
-            (" and ", " et "),
-            (" or ", " ou "),
-            ("goals", "buts"),
-            ("goal", "but"),
-            ("draw", "nul"),
+            ("Winner:", "Vainqueur :"), ("Winner :", "Vainqueur :"),
+            (" and ", " et "), (" or ", " ou "),
+            ("goals", "buts"), ("goal", "but"), ("draw", "nul"),
             ("Both teams to score", "Les deux équipes marquent"),
             ("BTTS", "Les deux marquent"),
         ],
         "es": [
             ("Win or draw", "Victoria o Empate"),
-            ("Winner:", "Ganador:"),
-            ("Winner :", "Ganador:"),
-            (" and ", " y "),
-            (" or ", " o "),
-            ("goals", "goles"),
-            ("goal", "gol"),
-            ("draw", "empate"),
+            ("Winner:", "Ganador:"), ("Winner :", "Ganador:"),
+            (" and ", " y "), (" or ", " o "),
+            ("goals", "goles"), ("goal", "gol"), ("draw", "empate"),
             ("Both teams to score", "Ambos equipos marcan"),
             ("BTTS", "Ambos marcan"),
         ],
         "pt": [
             ("Win or draw", "Vitória ou Empate"),
-            ("Winner:", "Vencedor:"),
-            ("Winner :", "Vencedor:"),
-            (" and ", " e "),
-            (" or ", " ou "),
-            ("goals", "golos"),
-            ("goal", "golo"),
-            ("draw", "empate"),
+            ("Winner:", "Vencedor:"), ("Winner :", "Vencedor:"),
+            (" and ", " e "), (" or ", " ou "),
+            ("goals", "golos"), ("goal", "golo"), ("draw", "empate"),
             ("Both teams to score", "Ambas equipas marcam"),
             ("BTTS", "Ambas marcam"),
         ],
         "ar": [
             ("Win or draw", "فوز أو تعادل"),
-            ("Winner:", "الفائز:"),
-            ("Winner :", "الفائز:"),
-            (" and ", " و "),
-            (" or ", " أو "),
-            ("goals", "أهداف"),
-            ("goal", "هدف"),
-            ("draw", "تعادل"),
+            ("Winner:", "الفائز:"), ("Winner :", "الفائز:"),
+            (" and ", " و "), (" or ", " أو "),
+            ("goals", "أهداف"), ("goal", "هدف"), ("draw", "تعادل"),
             ("Both teams to score", "كلا الفريقين يسجلان"),
             ("BTTS", "كلا الفريقين يسجلان"),
         ],
     }
-    
     result = advice
     for en_term, translated in replacements.get(lang, []):
         result = result.replace(en_term, translated)
@@ -203,6 +184,24 @@ def is_valid_uo(value):
         return v > 0
     except:
         return False
+
+def calculate_total_goals(predictions, percent):
+    """Calcule le total de buts prévus."""
+    goals = predictions.get("goals", {})
+    gh = parse_score_value(goals.get("home"))
+    ga = parse_score_value(goals.get("away"))
+    
+    if gh is not None and ga is not None:
+        return gh + ga
+    
+    try:
+        ph = float(percent.get("home", "0%").replace("%", ""))
+        pa = float(percent.get("away", "0%").replace("%", ""))
+        equilibre = 100 - abs(ph - pa)
+        total = 1.8 + (equilibre / 100) * 1.5
+        return round(total, 1)
+    except:
+        return None
 
 # ------------------------------------------------------------
 # 4. LANGUES
@@ -590,11 +589,15 @@ def get_all_markets_text(fixture, lang="fr"):
         comparison = preds.get("comparison", {})
         teams_stats = preds.get("teams", {})
         txt = f"⚽ *{home} vs {away}*\n\n"
+        
+        # 1X2
         ph = percent.get("home", "0%"); pd = percent.get("draw", "0%"); pa = percent.get("away", "0%")
         txt += f"🔮 *1X2*\n"
         txt += f"🏠 {home} : {ph} {progress_bar(ph)}\n"
         txt += f"🤝 {at(lang, 'draw')} : {pd} {progress_bar(pd)}\n"
         txt += f"✈️ {away} : {pa} {progress_bar(pa)}\n\n"
+        
+        # Winner
         winner = predictions.get("winner", {})
         if winner.get("name"):
             txt += f"🏆 *{at(lang, 'winner')}* : {winner['name']}"
@@ -602,22 +605,41 @@ def get_all_markets_text(fixture, lang="fr"):
                 comment = translate_advice(winner['comment'], lang)
                 txt += f" _{comment}_"
             txt += "\n\n"
+        
+        # Win or Draw
         wod = predictions.get("win_or_draw")
         if wod is not None:
             txt += f"🎯 *{at(lang, 'win_or_draw')}* : {at(lang, 'yes') if wod else at(lang, 'no')}\n\n"
+        
+        # Total des buts prévus
+        total_goals = calculate_total_goals(predictions, percent)
+        if total_goals is not None:
+            if total_goals > 2.5:
+                over_under_label = at(lang, "over_25")
+            else:
+                over_under_label = at(lang, "under_25")
+            txt += f"⚽ *{at(lang, 'total_goals')}* : {total_goals} ({over_under_label})\n\n"
+        
+        # Under/Over (si valide)
         uo = predictions.get("under_over")
         if is_valid_uo(uo):
             txt += f"📈 *{at(lang, 'under_over')}* : {uo}\n\n"
+        
+        # Score exact
         goals = predictions.get("goals", {})
         gh = parse_score_value(goals.get("home"))
         ga = parse_score_value(goals.get("away"))
         if gh is None or ga is None:
             gh, ga = calculate_score_from_probs(percent)
         txt += f"⚽ *{at(lang, 'score_predicted')}* : {home} {gh}-{ga} {away}\n\n"
+        
+        # Conseil
         advice = predictions.get("advice")
         if advice and advice != "No predictions available":
             advice_translated = translate_advice(advice, lang)
             txt += f"💡 *{at(lang, 'advice')}* : {advice_translated}\n\n"
+        
+        # Comparaison
         if comparison:
             txt += f"📊 *{at(lang, 'total')}*\n"
             labels = [("form", at(lang, "form")), ("att", at(lang, "att")), ("def", at(lang, "def")),
@@ -628,6 +650,8 @@ def get_all_markets_text(fixture, lang="fr"):
                 h = data.get("home", "?"); a = data.get("away", "?")
                 txt += f"`{label:<12} 🏠 {h:<6} ✈️ {a}`\n"
             txt += "\n"
+        
+        # Forme des équipes
         for team_key in ["home", "away"]:
             ts = teams_stats.get(team_key, {})
             form = ts.get("forme", "")
@@ -649,6 +673,7 @@ def get_market_text(fixture, market_type, lang="fr"):
         predictions = preds.get("predictions", {})
         comparison = preds.get("comparison", {})
         percent = predictions.get("percent", {})
+        
         if market_type == "h2h":
             ph = percent.get("home", "0%").replace("%", "")
             pd = percent.get("draw", "0%").replace("%", "")
@@ -665,18 +690,31 @@ def get_market_text(fixture, market_type, lang="fr"):
             txt += f"✈️ {away} : {pa_f:.1f}% {progress_bar(pa_f)}\n\n"
             txt += f"✅ *{pred}*"
             return txt, {"prob_home": ph_f, "prob_draw": pd_f, "prob_away": pa_f, "prediction": pred}
+        
         elif market_type == "ou":
             uo = predictions.get("under_over", "N/A")
             goals = predictions.get("goals", {})
+            total_goals = calculate_total_goals(predictions, percent)
+            
             txt = f"📈 *{at(lang, 'under_over')}*\n\n"
-            if is_valid_uo(uo):
+            
+            if total_goals is not None:
+                if total_goals > 2.5:
+                    over_under_label = at(lang, "over_25")
+                else:
+                    over_under_label = at(lang, "under_25")
+                txt += f"⚽ *{at(lang, 'total_goals')}* : {total_goals}\n"
+                txt += f"🎯 {at(lang, 'advice')} : *{over_under_label}*\n\n"
+            elif is_valid_uo(uo):
                 txt += f"🎯 {at(lang, 'advice')} : *{uo}*\n\n"
             else:
                 txt += f"⚠️ {at(lang, 'not_available')}\n\n"
+            
             txt += f"⚽ {at(lang, 'goals')} :\n"
             txt += f"🏠 {home} : {goals.get('home','?')}\n"
             txt += f"✈️ {away} : {goals.get('away','?')}\n"
-            return txt, {"prediction": uo if is_valid_uo(uo) else "N/A"}
+            return txt, {"prediction": f"{total_goals} buts" if total_goals else uo}
+        
         elif market_type == "score":
             goals = predictions.get("goals", {})
             gh = parse_score_value(goals.get("home"))
@@ -688,6 +726,7 @@ def get_market_text(fixture, market_type, lang="fr"):
             winner = predictions.get("winner", {}).get("name", "?")
             txt += f"🏆 {at(lang, 'winner')} : {winner}"
             return txt, {"prediction": f"{gh}-{ga}"}
+        
         elif market_type == "advice":
             advice = predictions.get("advice", at(lang, "no_advice"))
             winner = predictions.get("winner", {})
@@ -703,6 +742,7 @@ def get_market_text(fixture, market_type, lang="fr"):
                     comment = translate_advice(winner['comment'], lang)
                     txt += f"_{comment}_"
             return txt, {"prediction": advice}
+        
         elif market_type == "compare":
             txt = f"📊 *{at(lang, 'total')}*\n\n"
             labels = [("form", at(lang, "form")), ("att", at(lang, "att")), ("def", at(lang, "def")),
@@ -713,6 +753,7 @@ def get_market_text(fixture, market_type, lang="fr"):
                 h = data.get("home", "?"); a = data.get("away", "?")
                 txt += f"`{label:<12} 🏠 {h:<6} ✈️ {a}`\n"
             return txt, {"prediction": at(lang, "total")}
+        
         return t(lang, "no_market"), None
     except Exception as e:
         return f"❌ Erreur : {str(e)[:100]}", None
@@ -1065,6 +1106,6 @@ threading.Thread(target=run_http, daemon=True).start()
 if __name__ == "__main__":
     init_db()
     print("✅ Base de données initialisée.")
-    print("⚽ API-Football - Reformulation conseils")
+    print("⚽ API-Football - Total buts + reformulation conseils")
     print("✅ Bot démarré.")
     bot.infinity_polling()
