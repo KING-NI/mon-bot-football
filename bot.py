@@ -185,23 +185,95 @@ def is_valid_uo(value):
     except:
         return False
 
-def calculate_total_goals(predictions, percent):
-    """Calcule le total de buts prévus."""
-    goals = predictions.get("goals", {})
-    gh = parse_score_value(goals.get("home"))
-    ga = parse_score_value(goals.get("away"))
-    
-    if gh is not None and ga is not None:
-        return gh + ga
-    
+def parse_float_value(val):
+    """Parse une valeur en float, retourne None si invalide."""
+    if val is None:
+        return None
     try:
-        ph = float(percent.get("home", "0%").replace("%", ""))
-        pa = float(percent.get("away", "0%").replace("%", ""))
-        equilibre = 100 - abs(ph - pa)
-        total = 1.8 + (equilibre / 100) * 1.5
-        return round(total, 1)
+        return float(str(val).strip())
     except:
         return None
+
+def calculate_score_from_probs(percent):
+    """
+    Fallback intelligent : Calcule un score exact basé sur les probabilités 1X2.
+    Évite de donner toujours le même score si l'API ne fournit pas les buts attendus.
+    """
+    try:
+        ph = float(percent.get("home", "0%").replace("%", ""))
+        pd = float(percent.get("draw", "0%").replace("%", ""))
+        pa = float(percent.get("away", "0%").replace("%", ""))
+    except:
+        ph, pd, pa = 33, 33, 33
+
+    # Si l'API renvoie 0% partout, on met un score par défaut (1-1)
+    if ph == 0 and pd == 0 and pa == 0:
+        return 1, 1
+
+    # Estimation des buts attendus en fonction des probabilités
+    # Une équipe avec 60% de chances de gagner marque en moyenne ~2 buts
+    # Une équipe avec 30% de chances marque ~1 but
+    exp_h = (ph / 100) * 3.2
+    exp_a = (pa / 100) * 3.2
+    
+    # Ajustement selon le match nul (moins de nul = plus de buts)
+    if pd < 25:
+        exp_h += 0.4
+        exp_a += 0.4
+        
+    score_h = int(round(exp_h))
+    score_a = int(round(exp_a))
+    
+    # S'assurer que le score correspond au vainqueur prévu
+    if ph > pa and score_h <= score_a:
+        score_h = score_a + 1
+    elif pa > ph and score_a <= score_h:
+        score_a = score_h + 1
+        
+    return score_h, score_a
+
+def get_consistent_predictions(predictions, percent, comparison, lang):
+    """
+    Garantit que le total de buts et le score exact sont toujours cohérents.
+    Ignore les valeurs de handicap négatives (-2.5) et utilise un fallback intelligent.
+    """
+    goals = predictions.get("goals", {})
+    raw_h = goals.get("home")
+    raw_a = goals.get("away")
+
+    gh = parse_float_value(raw_h)
+    ga = parse_float_value(raw_a)
+
+    total_goals = None
+    score_h = None
+    score_a = None
+
+    # Cas 1 : L'API fournit des buts attendus valides et positifs (ex: 1.45 et 1.35)
+    if gh is not None and ga is not None and gh >= 0 and ga >= 0:
+        total_goals = round(gh + ga, 1)
+        score_h = int(round(gh))
+        score_a = int(round(ga))
+        # Ajustement pour que la somme des arrondis colle au total
+        if score_h + score_a != round(total_goals):
+            if gh > ga:
+                score_h = int(total_goals) - score_a
+            else:
+                score_a = int(total_goals) - score_h
+
+    # Cas 2 : L'API renvoie un handicap (négatif) ou rien -> Fallback intelligent
+    if total_goals is None or score_h is None or score_a is None:
+        score_h, score_a = calculate_score_from_probs(percent)
+        total_goals = score_h + score_a
+
+    # Forcer la cohérence finale
+    total_goals = score_h + score_a
+
+    if total_goals > 2.5:
+        ou_label = at(lang, "over_25")
+    else:
+        ou_label = at(lang, "under_25")
+
+    return total_goals, score_h, score_a, ou_label
 
 # ------------------------------------------------------------
 # 4. LANGUES
@@ -374,42 +446,6 @@ def is_match_upcoming(match, tolerance_minutes=20):
         return now_utc <= dt_utc + timedelta(minutes=tolerance_minutes)
     except:
         return True
-
-def parse_score_value(val):
-    if val is None:
-        return None
-    s = str(val).strip()
-    if not s or s == "?":
-        return None
-    if "-" in s and not s.startswith("-"):
-        try:
-            return int(s.split("-")[0])
-        except:
-            return None
-    if s.startswith("-"):
-        return None
-    try:
-        return int(float(s))
-    except:
-        return None
-
-def calculate_score_from_probs(percent):
-    try:
-        ph = float(percent.get("home", "0%").replace("%", ""))
-        pd = float(percent.get("draw", "0%").replace("%", ""))
-        pa = float(percent.get("away", "0%").replace("%", ""))
-    except:
-        ph, pd, pa = 40, 30, 30
-    if ph > 60: h, a = 2, 0
-    elif ph > 45: h, a = 2, 1
-    elif ph > 35: h, a = 1, 0
-    elif pa > 60: h, a = 0, 2
-    elif pa > 45: h, a = 1, 2
-    elif pa > 35: h, a = 0, 1
-    else: h, a = 1, 1
-    if ph > pa + 20: h = max(h, a + 1)
-    elif pa > ph + 20: a = max(a, h + 1)
-    return h, a
 
 # ------------------------------------------------------------
 # 6. BASE DE DONNÉES
@@ -611,27 +647,22 @@ def get_all_markets_text(fixture, lang="fr"):
         if wod is not None:
             txt += f"🎯 *{at(lang, 'win_or_draw')}* : {at(lang, 'yes') if wod else at(lang, 'no')}\n\n"
         
-        # Total des buts prévus
-        total_goals = calculate_total_goals(predictions, percent)
-        if total_goals is not None:
-            if total_goals > 2.5:
-                over_under_label = at(lang, "over_25")
-            else:
-                over_under_label = at(lang, "under_25")
-            txt += f"⚽ *{at(lang, 'total_goals')}* : {total_goals} ({over_under_label})\n\n"
+        # --- CORRECTION ICI : Calcul cohérent du score et du total de buts ---
+        total_goals, gh, ga, ou_label = get_consistent_predictions(predictions, percent, comparison, lang)
+        
+        txt += f"⚽ *{at(lang, 'total_goals')}* : {total_goals} ({ou_label})\n\n"
         
         # Under/Over (si valide)
         uo = predictions.get("under_over")
         if is_valid_uo(uo):
             txt += f"📈 *{at(lang, 'under_over')}* : {uo}\n\n"
         
-        # Score exact
-        goals = predictions.get("goals", {})
-        gh = parse_score_value(goals.get("home"))
-        ga = parse_score_value(goals.get("away"))
-        if gh is None or ga is None:
-            gh, ga = calculate_score_from_probs(percent)
+        # Score exact (utilise les valeurs cohérentes)
         txt += f"⚽ *{at(lang, 'score_predicted')}* : {home} {gh}-{ga} {away}\n\n"
+        
+        # Note si les données API sont incomplètes
+        if not percent or percent.get("home") == "0%":
+            txt += "⚠️ _Note: L'API ne fournit pas de données détaillées pour ce match. Le score est une estimation basée sur les probabilités._\n\n"
         
         # Conseil
         advice = predictions.get("advice")
@@ -692,37 +723,24 @@ def get_market_text(fixture, market_type, lang="fr"):
             return txt, {"prob_home": ph_f, "prob_draw": pd_f, "prob_away": pa_f, "prediction": pred}
         
         elif market_type == "ou":
-            uo = predictions.get("under_over", "N/A")
-            goals = predictions.get("goals", {})
-            total_goals = calculate_total_goals(predictions, percent)
+            # --- CORRECTION ICI : Utilisation de la fonction cohérente ---
+            total_goals, gh, ga, ou_label = get_consistent_predictions(predictions, percent, comparison, lang)
             
             txt = f"📈 *{at(lang, 'under_over')}*\n\n"
-            
-            if total_goals is not None:
-                if total_goals > 2.5:
-                    over_under_label = at(lang, "over_25")
-                else:
-                    over_under_label = at(lang, "under_25")
-                txt += f"⚽ *{at(lang, 'total_goals')}* : {total_goals}\n"
-                txt += f"🎯 {at(lang, 'advice')} : *{over_under_label}*\n\n"
-            elif is_valid_uo(uo):
-                txt += f"🎯 {at(lang, 'advice')} : *{uo}*\n\n"
-            else:
-                txt += f"⚠️ {at(lang, 'not_available')}\n\n"
-            
+            txt += f"⚽ *{at(lang, 'total_goals')}* : {total_goals}\n"
+            txt += f"🎯 {at(lang, 'advice')} : *{ou_label}*\n\n"
             txt += f"⚽ {at(lang, 'goals')} :\n"
-            txt += f"🏠 {home} : {goals.get('home','?')}\n"
-            txt += f"✈️ {away} : {goals.get('away','?')}\n"
-            return txt, {"prediction": f"{total_goals} buts" if total_goals else uo}
+            txt += f"🏠 {home} : {gh}\n"
+            txt += f"✈️ {away} : {ga}\n"
+            return txt, {"prediction": f"{ou_label} ({total_goals} buts)"}
         
         elif market_type == "score":
-            goals = predictions.get("goals", {})
-            gh = parse_score_value(goals.get("home"))
-            ga = parse_score_value(goals.get("away"))
-            if gh is None or ga is None:
-                gh, ga = calculate_score_from_probs(percent)
+            # --- CORRECTION ICI : Utilisation de la fonction cohérente ---
+            total_goals, gh, ga, ou_label = get_consistent_predictions(predictions, percent, comparison, lang)
+            
             txt = f"⚽ *{at(lang, 'score_predicted')}*\n\n"
             txt += f"🎯 *{home} {gh}-{ga} {away}*\n\n"
+            txt += f"📈 {at(lang, 'total_goals')} : {total_goals} ({ou_label})\n"
             winner = predictions.get("winner", {}).get("name", "?")
             txt += f"🏆 {at(lang, 'winner')} : {winner}"
             return txt, {"prediction": f"{gh}-{ga}"}
